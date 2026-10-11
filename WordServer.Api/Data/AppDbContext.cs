@@ -15,6 +15,13 @@ namespace WordServer.Api.Data
         public DbSet<SettingEntity> Settings => Set<SettingEntity>();
         public DbSet<LogEntryEntity> Logs => Set<LogEntryEntity>();
 
+        // Additional enterprise tables
+        public DbSet<UserEntity> Users => Set<UserEntity>();
+        public DbSet<DocumentVersionEntity> DocumentVersions => Set<DocumentVersionEntity>();
+        public DbSet<TemplateCategoryEntity> TemplateCategories => Set<TemplateCategoryEntity>();
+        public DbSet<ProcessingHistoryEntity> ProcessingHistory => Set<ProcessingHistoryEntity>();
+        public DbSet<DocumentCommentEntity> DocumentComments => Set<DocumentCommentEntity>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -46,6 +53,37 @@ namespace WordServer.Api.Data
             modelBuilder.Entity<LogEntryEntity>(entity =>
             {
                 entity.HasKey(e => e.Id);
+            });
+
+            modelBuilder.Entity<UserEntity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Username).IsUnique();
+                entity.HasIndex(e => e.ApiKey).IsUnique();
+            });
+
+            modelBuilder.Entity<DocumentVersionEntity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.DocumentId, e.VersionNumber });
+            });
+
+            modelBuilder.Entity<TemplateCategoryEntity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+            });
+
+            modelBuilder.Entity<ProcessingHistoryEntity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Timestamp);
+            });
+
+            modelBuilder.Entity<DocumentCommentEntity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DocumentId);
             });
         }
     }

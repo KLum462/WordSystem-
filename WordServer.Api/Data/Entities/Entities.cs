@@ -46,6 +46,8 @@ namespace WordServer.Api.Data.Entities
 
         public string MetadataJson { get; set; } = "{}";
 
+        public int? CategoryId { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
@@ -111,5 +113,124 @@ namespace WordServer.Api.Data.Entities
         public string? Source { get; set; }
 
         public string? Exception { get; set; }
+    }
+
+    [Table("Users")]
+    public class UserEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string Username { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string FullName { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(255)]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [MaxLength(50)]
+        public string Role { get; set; } = "Intern";
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [Table("DocumentVersions")]
+    public class DocumentVersionEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string DocumentId { get; set; } = string.Empty;
+
+        public int VersionNumber { get; set; } = 1;
+
+        [MaxLength(255)]
+        public string Title { get; set; } = string.Empty;
+
+        public string ContentJson { get; set; } = "{}";
+
+        [MaxLength(255)]
+        public string Author { get; set; } = string.Empty;
+
+        [MaxLength(1000)]
+        public string? ChangeNotes { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [Table("TemplateCategories")]
+    public class TemplateCategoryEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500)]
+        public string? Description { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [Table("ProcessingHistory")]
+    public class ProcessingHistoryEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [MaxLength(100)]
+        public string DocumentId { get; set; } = string.Empty;
+
+        [MaxLength(50)]
+        public string Operation { get; set; } = "uppercase";
+
+        public int InputLength { get; set; }
+
+        public int ResultLength { get; set; }
+
+        [MaxLength(50)]
+        public string? ClientIp { get; set; }
+
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    }
+
+    [Table("DocumentComments")]
+    public class DocumentCommentEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string DocumentId { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string Author { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(2000)]
+        public string Comment { get; set; } = string.Empty;
+
+        public bool Resolved { get; set; } = false;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

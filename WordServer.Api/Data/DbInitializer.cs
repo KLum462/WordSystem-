@@ -164,6 +164,85 @@ namespace WordServer.Api.Data
                 });
             }
 
+            // Seed Users
+            if (!await context.Users.AnyAsync())
+            {
+                context.Users.AddRange(
+                    new UserEntity
+                    {
+                        Username = "admin",
+                        FullName = "Lead Architect",
+                        Email = "admin@company.local",
+                        ApiKey = "secret-internship-api-key-2026",
+                        Role = "Admin",
+                        CreatedAt = DateTime.UtcNow,
+                        IsActive = true
+                    },
+                    new UserEntity
+                    {
+                        Username = "ivan_intern",
+                        FullName = "Ivan Developer",
+                        Email = "ivan@internship.local",
+                        ApiKey = "internship-key-demo",
+                        Role = "Intern",
+                        CreatedAt = DateTime.UtcNow,
+                        IsActive = true
+                    }
+                );
+            }
+
+            // Seed Template Categories
+            if (!await context.TemplateCategories.AnyAsync())
+            {
+                context.TemplateCategories.AddRange(
+                    new TemplateCategoryEntity { Name = "Отчеты (Reports)", Description = "Корпоративные и квартальные отчеты", CreatedAt = DateTime.UtcNow },
+                    new TemplateCategoryEntity { Name = "Договоры (Contracts)", Description = "Договоры подряда и соглашения", CreatedAt = DateTime.UtcNow },
+                    new TemplateCategoryEntity { Name = "Служебные записки (Memos)", Description = "Внутренний документооборот", CreatedAt = DateTime.UtcNow }
+                );
+            }
+
+            // Seed Document Version for doc-001
+            if (!await context.DocumentVersions.AnyAsync(v => v.DocumentId == "doc-001"))
+            {
+                context.DocumentVersions.Add(new DocumentVersionEntity
+                {
+                    DocumentId = "doc-001",
+                    VersionNumber = 1,
+                    Title = "Report v1.0",
+                    ContentJson = "{\"status\": \"Initial approved release\"}",
+                    Author = "Ivan",
+                    ChangeNotes = "Initial generation from internship template",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            // Seed Document Comment for doc-001
+            if (!await context.DocumentComments.AnyAsync(c => c.DocumentId == "doc-001"))
+            {
+                context.DocumentComments.Add(new DocumentCommentEntity
+                {
+                    DocumentId = "doc-001",
+                    Author = "Mentor",
+                    Comment = "Отличная структура отчета, все стили и таблица проверены.",
+                    Resolved = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            // Seed Processing History
+            if (!await context.ProcessingHistory.AnyAsync())
+            {
+                context.ProcessingHistory.Add(new ProcessingHistoryEntity
+                {
+                    DocumentId = "doc-001",
+                    Operation = "uppercase",
+                    InputLength = 120,
+                    ResultLength = 120,
+                    ClientIp = "127.0.0.1",
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
             await context.SaveChangesAsync();
         }
     }

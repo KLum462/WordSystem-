@@ -1,16 +1,38 @@
-namespace WordClient.TestApp;
+using System;
+using System.IO;
+using System.Reflection;
+using System.Windows.Forms;
 
-static class Program
+namespace WordClient.TestApp
 {
-    /// <summary>
-    ///  The main entry point for the application.
-    /// </summary>
-    [STAThread]
-    static void Main()
+    static class Program
     {
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
-        ApplicationConfiguration.Initialize();
-        Application.Run(new Form1());
-    }    
+        [STAThread]
+        static void Main()
+        {
+            // Resolve office.dll assembly dynamically if requested
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                var assemblyName = new AssemblyName(args.Name).Name;
+                if (string.Equals(assemblyName, "office", StringComparison.OrdinalIgnoreCase))
+                {
+                    var localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "office.dll");
+                    if (File.Exists(localPath))
+                    {
+                        return Assembly.LoadFrom(localPath);
+                    }
+
+                    var gacPath = @"C:\Windows\assembly\GAC_MSIL\office\15.0.0.0__71e9bce111e9429c\OFFICE.DLL";
+                    if (File.Exists(gacPath))
+                    {
+                        return Assembly.LoadFrom(gacPath);
+                    }
+                }
+                return null;
+            };
+
+            ApplicationConfiguration.Initialize();
+            Application.Run(new Form1());
+        }    
+    }
 }

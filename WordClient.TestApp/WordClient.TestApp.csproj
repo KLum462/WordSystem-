@@ -1,7 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\WordClient.Core\WordClient.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\WordClient.Core\libs\OFFICE.DLL">
+      <Link>office.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <PropertyGroup>

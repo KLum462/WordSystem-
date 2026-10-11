@@ -18,4 +18,12 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)libs\OFFICE.DLL">
+      <Link>office.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+
 </Project>
