@@ -1,0 +1,6 @@
+@WordServer.Api_HostAddress = http://localhost:5219
+
+GET {{WordServer.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

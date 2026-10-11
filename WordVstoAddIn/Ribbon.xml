@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
+  <ribbon>
+    <tabs>
+      <tab id="tabInternship" label="Internship Word Tools">
+        <group id="grpServer" label="Server &amp; Authentication">
+          <button id="btnAuthenticate" label="Authenticate" size="large" onAction="OnAuthenticateClick" imageMso="SignDocument" screentip="Validate API Key" supertip="Validates authentication against ASP.NET Core server." />
+        </group>
+        <group id="grpDocument" label="Document Management">
+          <button id="btnLoadDocument" label="Load Document" size="large" onAction="OnLoadDocumentClick" imageMso="FileOpen" screentip="Load Document" supertip="Requests JSON document from server and generates .docx using Word Interop." />
+          <button id="btnSaveTemplate" label="Save Template" size="large" onAction="OnSaveTemplateClick" imageMso="SaveSelectionToTemplateGallery" screentip="Save Template" supertip="Saves active document structure as a template on the server." />
+        </group>
+        <group id="grpTextProcessing" label="Text Processing">
+          <button id="btnSendSelectedText" label="Send Selected Text" size="large" onAction="OnSendSelectedTextClick" imageMso="FormatPainter" screentip="Send Selected Text" supertip="Sends selected text to server for processing and inserts result back." />
+          <button id="btnSendDocument" label="Send Document" size="large" onAction="OnSendDocumentClick" imageMso="SendEmail" screentip="Send Document" supertip="Sends entire document to server (enforcing 100 MB limit)." />
+          <button id="btnCheckDocument" label="Check Document" size="large" onAction="OnCheckDocumentClick" imageMso="Spelling" screentip="Check Document" supertip="Inspects document statistics, empty paragraphs, and spelling." />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
