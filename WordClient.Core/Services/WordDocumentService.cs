@@ -27,10 +27,18 @@ namespace WordClient.Core.Services
         public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
     }
 
+    public class WordDocumentFileInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? FullPath { get; set; }
+        public long? FileSizeBytes { get; set; }
+    }
+
     public class WordDocumentService : IDisposable
     {
         private Word.Application? _wordApp;
         private bool _ownsApplicationInstance;
+        private bool _shouldReleaseApplication;
 
         [DllImport("ole32.dll")]
         private static extern int CLSIDFromProgID([MarshalAs(UnmanagedType.LPWStr)] string lpszProgID, out Guid lpclsid);
@@ -67,6 +75,7 @@ namespace WordClient.Core.Services
                 // Try attaching to already running Word instance
                 _wordApp = GetRunningWordApplication();
                 _ownsApplicationInstance = false;
+                _shouldReleaseApplication = true;
                 ClientLogger.LogInfo("Connected to active Word instance.");
             }
             catch
@@ -76,6 +85,7 @@ namespace WordClient.Core.Services
                 {
                     _wordApp = new Word.Application();
                     _ownsApplicationInstance = true;
+                    _shouldReleaseApplication = true;
                     ClientLogger.LogInfo("Started new Microsoft Word process.");
                 }
                 catch (COMException ex)
@@ -126,9 +136,18 @@ namespace WordClient.Core.Services
         public Word.Document CreateNewDocument()
         {
             var app = GetOrCreateApplication(makeVisible: true);
-            var doc = app.Documents.Add();
-            ClientLogger.LogInfo("Created a new blank Word document.");
-            return doc;
+            Word.Documents? docs = null;
+            try
+            {
+                docs = app.Documents;
+                var doc = docs.Add();
+                ClientLogger.LogInfo("Created a new blank Word document.");
+                return doc;
+            }
+            finally
+            {
+                ReleaseComObject(docs);
+            }
         }
 
         public Word.Document OpenDocument(string filePath)
@@ -142,7 +161,7 @@ namespace WordClient.Core.Services
             var fileInfo = new FileInfo(filePath);
             if (fileInfo.Length > 104857600)
             {
-                throw new InvalidOperationException($"The document file size ({fileInfo.Length / 1024 / 1024} MB) exceeds the 100 MB limit.");
+                throw new InvalidOperationException($"The document file size ({fileInfo.Length / 1024.0 / 1024.0:F2} MB) exceeds the 100 MB limit.");
             }
 
             // Check if file is locked or in use
@@ -152,9 +171,82 @@ namespace WordClient.Core.Services
             }
 
             var app = GetOrCreateApplication(makeVisible: true);
-            var doc = app.Documents.Open(filePath);
-            ClientLogger.LogInfo($"Opened Word document: {filePath}");
-            return doc;
+            Word.Documents? docs = null;
+            try
+            {
+                docs = app.Documents;
+                var doc = docs.Open(filePath);
+                ClientLogger.LogInfo($"Opened Word document: {filePath}");
+                return doc;
+            }
+            finally
+            {
+                ReleaseComObject(docs);
+            }
+        }
+
+        public void SaveActiveDocumentAs(string savePath)
+        {
+            if (string.IsNullOrWhiteSpace(savePath))
+                throw new ArgumentException("Save path cannot be empty.", nameof(savePath));
+
+            var fullPath = Path.GetFullPath(savePath);
+            if (File.Exists(fullPath) && IsFileLocked(fullPath))
+            {
+                throw new IOException($"Target file '{Path.GetFileName(fullPath)}' is locked or in use by another process.");
+            }
+
+            var dir = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            var doc = GetActiveDocument();
+            try
+            {
+                doc.SaveAs2(FileName: fullPath, FileFormat: Word.WdSaveFormat.wdFormatXMLDocument);
+                ClientLogger.LogInfo($"Saved active document as .docx: {fullPath}");
+            }
+            finally
+            {
+                ReleaseComObject(doc);
+            }
+        }
+
+        public WordDocumentFileInfo GetActiveDocumentFileInfo()
+        {
+            var doc = GetActiveDocument();
+            try
+            {
+                string name = doc.Name ?? "Document.docx";
+                string? fullName = null;
+                try
+                {
+                    fullName = doc.FullName;
+                }
+                catch
+                {
+                    fullName = null;
+                }
+
+                long? fileSize = null;
+                if (!string.IsNullOrWhiteSpace(fullName) && File.Exists(fullName))
+                {
+                    fileSize = new FileInfo(fullName).Length;
+                }
+
+                return new WordDocumentFileInfo
+                {
+                    Name = name,
+                    FullPath = (!string.IsNullOrWhiteSpace(fullName) && File.Exists(fullName)) ? fullName : null,
+                    FileSizeBytes = fileSize
+                };
+            }
+            finally
+            {
+                ReleaseComObject(doc);
+            }
         }
 
         public Word.Document GenerateDocumentFromDto(DocumentDto dto, string? savePath = null)
@@ -163,49 +255,83 @@ namespace WordClient.Core.Services
                 throw new ArgumentNullException(nameof(dto));
 
             var app = GetOrCreateApplication(makeVisible: true);
+            Word.Documents? docs = null;
             Word.Document? doc = null;
             Word.Paragraphs? paragraphs = null;
             Word.Styles? styles = null;
             Word.Tables? tables = null;
+            Word.Bookmarks? bookmarks = null;
 
             try
             {
-                doc = app.Documents.Add();
+                docs = app.Documents;
+                doc = docs.Add();
                 styles = doc.Styles;
                 paragraphs = doc.Paragraphs;
                 tables = doc.Tables;
+                bookmarks = doc.Bookmarks;
 
-                // Configure default font settings
-                var contentRange = doc.Content;
+                // Configure Normal style font defaults first
                 if (dto.Settings != null)
                 {
-                    if (!string.IsNullOrWhiteSpace(dto.Settings.Font))
+                    Word.Style? normalStyle = null;
+                    Word.Font? normalFont = null;
+                    try
                     {
-                        contentRange.Font.Name = dto.Settings.Font;
+                        normalStyle = styles[Word.WdBuiltinStyle.wdStyleNormal];
+                        normalFont = normalStyle.Font;
+                        if (!string.IsNullOrWhiteSpace(dto.Settings.Font))
+                        {
+                            normalFont.Name = dto.Settings.Font;
+                        }
+                        if (dto.Settings.FontSize > 0)
+                        {
+                            normalFont.Size = dto.Settings.FontSize;
+                        }
                     }
-                    if (dto.Settings.FontSize > 0)
+                    catch
                     {
-                        contentRange.Font.Size = dto.Settings.FontSize;
+                        // Fallback applied per range below
+                    }
+                    finally
+                    {
+                        ReleaseComObject(normalFont);
+                        ReleaseComObject(normalStyle);
                     }
                 }
-                ReleaseComObject(contentRange);
 
                 // Add Title as Heading 1
                 if (!string.IsNullOrWhiteSpace(dto.Title))
                 {
-                    var titlePara = doc.Paragraphs.Add();
-                    var titleRange = titlePara.Range;
-                    titleRange.Text = dto.Title + "\n";
+                    Word.Paragraph? titlePara = null;
+                    Word.Range? titleRange = null;
+                    Word.Font? titleFont = null;
                     try
                     {
-                        titleRange.set_Style(Word.WdBuiltinStyle.wdStyleHeading1);
+                        titlePara = paragraphs.Add();
+                        titleRange = titlePara.Range;
+                        titleRange.Text = dto.Title + "\n";
+                        try
+                        {
+                            titleRange.set_Style(Word.WdBuiltinStyle.wdStyleHeading1);
+                        }
+                        catch
+                        {
+                            titleRange.Bold = 1;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(dto.Settings?.Font))
+                        {
+                            titleFont = titleRange.Font;
+                            titleFont.Name = dto.Settings!.Font;
+                        }
                     }
-                    catch
+                    finally
                     {
-                        titleRange.Bold = 1;
+                        ReleaseComObject(titleFont);
+                        ReleaseComObject(titleRange);
+                        ReleaseComObject(titlePara);
                     }
-                    ReleaseComObject(titleRange);
-                    ReleaseComObject(titlePara);
                 }
 
                 // Insert paragraphs with styles
@@ -213,37 +339,63 @@ namespace WordClient.Core.Services
                 {
                     foreach (var paraDto in dto.Content.Paragraphs)
                     {
-                        var para = doc.Paragraphs.Add();
-                        var range = para.Range;
-                        range.Text = paraDto.Text + "\n";
-
-                        if (!string.IsNullOrWhiteSpace(paraDto.Style))
+                        Word.Paragraph? para = null;
+                        Word.Range? range = null;
+                        Word.Font? rangeFont = null;
+                        try
                         {
-                            try
+                            para = paragraphs.Add();
+                            range = para.Range;
+                            range.Text = paraDto.Text + "\n";
+
+                            bool isHeading = false;
+                            if (!string.IsNullOrWhiteSpace(paraDto.Style))
                             {
-                                if (paraDto.Style.Equals("Heading1", StringComparison.OrdinalIgnoreCase) ||
-                                    paraDto.Style.Equals("Heading 1", StringComparison.OrdinalIgnoreCase))
+                                try
                                 {
-                                    range.set_Style(Word.WdBuiltinStyle.wdStyleHeading1);
+                                    if (paraDto.Style.Equals("Heading1", StringComparison.OrdinalIgnoreCase) ||
+                                        paraDto.Style.Equals("Heading 1", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        range.set_Style(Word.WdBuiltinStyle.wdStyleHeading1);
+                                        isHeading = true;
+                                    }
+                                    else if (paraDto.Style.Equals("Heading2", StringComparison.OrdinalIgnoreCase) ||
+                                             paraDto.Style.Equals("Heading 2", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        range.set_Style(Word.WdBuiltinStyle.wdStyleHeading2);
+                                        isHeading = true;
+                                    }
+                                    else
+                                    {
+                                        range.set_Style(Word.WdBuiltinStyle.wdStyleNormal);
+                                    }
                                 }
-                                else if (paraDto.Style.Equals("Heading2", StringComparison.OrdinalIgnoreCase) ||
-                                         paraDto.Style.Equals("Heading 2", StringComparison.OrdinalIgnoreCase))
+                                catch
                                 {
-                                    range.set_Style(Word.WdBuiltinStyle.wdStyleHeading2);
-                                }
-                                else
-                                {
-                                    range.set_Style(Word.WdBuiltinStyle.wdStyleNormal);
+                                    // Style could not be applied; keep default
                                 }
                             }
-                            catch
+
+                            // Re-apply configured font/size after style assignment so settings are preserved
+                            if (dto.Settings != null)
                             {
-                                // Style could not be applied; keep default
+                                rangeFont = range.Font;
+                                if (!string.IsNullOrWhiteSpace(dto.Settings.Font))
+                                {
+                                    rangeFont.Name = dto.Settings.Font;
+                                }
+                                if (!isHeading && dto.Settings.FontSize > 0)
+                                {
+                                    rangeFont.Size = dto.Settings.FontSize;
+                                }
                             }
                         }
-
-                        ReleaseComObject(range);
-                        ReleaseComObject(para);
+                        finally
+                        {
+                            ReleaseComObject(rangeFont);
+                            ReleaseComObject(range);
+                            ReleaseComObject(para);
+                        }
                     }
                 }
 
@@ -263,59 +415,101 @@ namespace WordClient.Core.Services
 
                             if (numCols > 0)
                             {
-                                var endRange = doc.Content;
-                                endRange.Collapse(Word.WdCollapseDirection.wdCollapseEnd);
-
-                                var wordTable = doc.Tables.Add(endRange, numRows, numCols);
-                                wordTable.Borders.Enable = 1;
-
-                                for (int rowIdx = 0; rowIdx < numRows; rowIdx++)
+                                Word.Range? endRange = null;
+                                Word.Table? wordTable = null;
+                                Word.Borders? borders = null;
+                                try
                                 {
-                                    var rowData = tableDto.Rows[rowIdx];
-                                    if (rowData == null) continue;
+                                    endRange = doc.Content;
+                                    endRange.Collapse(Word.WdCollapseDirection.wdCollapseEnd);
 
-                                    for (int colIdx = 0; colIdx < rowData.Count && colIdx < numCols; colIdx++)
+                                    wordTable = tables.Add(endRange, numRows, numCols);
+                                    borders = wordTable.Borders;
+                                    borders.Enable = 1;
+
+                                    for (int rowIdx = 0; rowIdx < numRows; rowIdx++)
                                     {
-                                        var cell = wordTable.Cell(rowIdx + 1, colIdx + 1);
-                                        var cellRange = cell.Range;
-                                        cellRange.Text = rowData[colIdx] ?? string.Empty;
+                                        var rowData = tableDto.Rows[rowIdx];
+                                        if (rowData == null) continue;
 
-                                        // Header row styling
-                                        if (rowIdx == 0)
+                                        for (int colIdx = 0; colIdx < rowData.Count && colIdx < numCols; colIdx++)
                                         {
-                                            cellRange.Bold = 1;
-                                            cell.Shading.BackgroundPatternColor = Word.WdColor.wdColorGray15;
-                                        }
+                                            Word.Cell? cell = null;
+                                            Word.Range? cellRange = null;
+                                            Word.Font? cellFont = null;
+                                            Word.Shading? shading = null;
+                                            try
+                                            {
+                                                cell = wordTable.Cell(rowIdx + 1, colIdx + 1);
+                                                cellRange = cell.Range;
+                                                cellRange.Text = rowData[colIdx] ?? string.Empty;
 
-                                        ReleaseComObject(cellRange);
-                                        ReleaseComObject(cell);
+                                                if (dto.Settings != null)
+                                                {
+                                                    cellFont = cellRange.Font;
+                                                    if (!string.IsNullOrWhiteSpace(dto.Settings.Font))
+                                                        cellFont.Name = dto.Settings.Font;
+                                                    if (dto.Settings.FontSize > 0)
+                                                        cellFont.Size = dto.Settings.FontSize;
+                                                }
+
+                                                // Header row styling
+                                                if (rowIdx == 0)
+                                                {
+                                                    cellRange.Bold = 1;
+                                                    shading = cell.Shading;
+                                                    shading.BackgroundPatternColor = Word.WdColor.wdColorGray15;
+                                                }
+                                            }
+                                            finally
+                                            {
+                                                ReleaseComObject(shading);
+                                                ReleaseComObject(cellFont);
+                                                ReleaseComObject(cellRange);
+                                                ReleaseComObject(cell);
+                                            }
+                                        }
                                     }
                                 }
-
-                                ReleaseComObject(wordTable);
-                                ReleaseComObject(endRange);
+                                finally
+                                {
+                                    ReleaseComObject(borders);
+                                    ReleaseComObject(wordTable);
+                                    ReleaseComObject(endRange);
+                                }
                             }
                         }
                     }
                 }
 
                 // Add default bookmark for result insertion
+                Word.Range? bookmarkRange = null;
+                Word.Bookmark? createdBookmark = null;
                 try
                 {
-                    var bookmarkRange = doc.Content;
+                    bookmarkRange = doc.Content;
                     bookmarkRange.Collapse(Word.WdCollapseDirection.wdCollapseEnd);
-                    doc.Bookmarks.Add("ResultBookmark", bookmarkRange);
-                    ReleaseComObject(bookmarkRange);
+                    createdBookmark = bookmarks.Add("ResultBookmark", bookmarkRange);
                 }
                 catch
                 {
                     // Optional bookmark
+                }
+                finally
+                {
+                    ReleaseComObject(createdBookmark);
+                    ReleaseComObject(bookmarkRange);
                 }
 
                 // Save document if path is specified
                 if (!string.IsNullOrWhiteSpace(savePath))
                 {
                     var fullPath = Path.GetFullPath(savePath);
+                    if (File.Exists(fullPath) && IsFileLocked(fullPath))
+                    {
+                        throw new IOException($"Target file '{Path.GetFileName(fullPath)}' is locked or in use by another process.");
+                    }
+
                     var dir = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     {
@@ -330,9 +524,219 @@ namespace WordClient.Core.Services
             }
             finally
             {
+                ReleaseComObject(bookmarks);
                 ReleaseComObject(tables);
                 ReleaseComObject(styles);
                 ReleaseComObject(paragraphs);
+                ReleaseComObject(docs);
+            }
+        }
+
+        public Word.Document GenerateDocumentFromTemplate(TemplateDto template, string? savePath = null)
+        {
+            if (template == null)
+                throw new ArgumentNullException(nameof(template));
+
+            var dto = new DocumentDto
+            {
+                Id = template.Id,
+                Title = template.Name,
+                Metadata = template.Metadata ?? new DocumentMetadataDto(),
+                Content = template.Content ?? new DocumentContentDto(),
+                Settings = template.Settings ?? new DocumentSettingsDto()
+            };
+
+            return GenerateDocumentFromDto(dto, savePath);
+        }
+
+        public DocumentDto ExtractDocumentStructure(string? overrideId = null, string? overrideTitle = null)
+        {
+            var doc = GetActiveDocument();
+            Word.Paragraphs? paragraphs = null;
+            Word.Tables? tables = null;
+            Word.Range? contentRange = null;
+
+            try
+            {
+                contentRange = doc.Content;
+                paragraphs = doc.Paragraphs;
+                tables = doc.Tables;
+
+                var extractedParagraphs = new List<ParagraphDto>();
+                for (int i = 1; i <= paragraphs.Count; i++)
+                {
+                    Word.Paragraph? para = null;
+                    Word.Range? range = null;
+                    try
+                    {
+                        para = paragraphs[i];
+                        range = para.Range;
+
+                        // Skip paragraphs that belong to tables (extracted separately below)
+                        bool inTable = false;
+                        try
+                        {
+                            inTable = (bool)range.Information[Word.WdInformation.wdWithInTable];
+                        }
+                        catch
+                        {
+                            inTable = false;
+                        }
+
+                        if (inTable) continue;
+
+                        var text = (range.Text ?? string.Empty).TrimEnd('\r', '\n', '\a');
+                        if (string.IsNullOrWhiteSpace(text)) continue;
+
+                        string styleName = "Normal";
+                        try
+                        {
+                            dynamic styleObj = range.get_Style();
+                            string rawStyle = styleObj?.NameLocal?.ToString() ?? string.Empty;
+                            if (rawStyle.IndexOf("Heading 1", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                rawStyle.IndexOf("Заголовок 1", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                styleName = "Heading1";
+                            }
+                            else if (rawStyle.IndexOf("Heading 2", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                     rawStyle.IndexOf("Заголовок 2", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                styleName = "Heading2";
+                            }
+                        }
+                        catch
+                        {
+                            styleName = "Normal";
+                        }
+
+                        extractedParagraphs.Add(new ParagraphDto
+                        {
+                            Style = styleName,
+                            Text = text
+                        });
+                    }
+                    finally
+                    {
+                        ReleaseComObject(range);
+                        ReleaseComObject(para);
+                    }
+                }
+
+                var extractedTables = new List<TableDto>();
+                for (int tIdx = 1; tIdx <= tables.Count; tIdx++)
+                {
+                    Word.Table? table = null;
+                    try
+                    {
+                        table = tables[tIdx];
+                        int rowCount = table.Rows.Count;
+                        int colCount = table.Columns.Count;
+                        var rows = new List<List<string>>();
+
+                        for (int r = 1; r <= rowCount; r++)
+                        {
+                            var rowValues = new List<string>();
+                            for (int c = 1; c <= colCount; c++)
+                            {
+                                Word.Cell? cell = null;
+                                Word.Range? cellRange = null;
+                                try
+                                {
+                                    cell = table.Cell(r, c);
+                                    cellRange = cell.Range;
+                                    var cellText = (cellRange.Text ?? string.Empty).TrimEnd('\r', '\n', '\a');
+                                    rowValues.Add(cellText);
+                                }
+                                catch
+                                {
+                                    rowValues.Add(string.Empty);
+                                }
+                                finally
+                                {
+                                    ReleaseComObject(cellRange);
+                                    ReleaseComObject(cell);
+                                }
+                            }
+                            rows.Add(rowValues);
+                        }
+
+                        extractedTables.Add(new TableDto
+                        {
+                            Name = $"Table{tIdx}",
+                            Rows = rows
+                        });
+                    }
+                    finally
+                    {
+                        ReleaseComObject(table);
+                    }
+                }
+
+                string fontName = "Times New Roman";
+                int fontSize = 12;
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(contentRange.Font.Name))
+                    {
+                        fontName = contentRange.Font.Name;
+                    }
+                    if (contentRange.Font.Size > 0 && contentRange.Font.Size < 200)
+                    {
+                        fontSize = (int)Math.Round(contentRange.Font.Size);
+                    }
+                }
+                catch
+                {
+                    // Keep default font settings
+                }
+
+                string author = Environment.UserName;
+                string title = overrideTitle ?? Path.GetFileNameWithoutExtension(doc.Name);
+                try
+                {
+                    dynamic props = doc.BuiltInDocumentProperties;
+                    string? propAuthor = props["Author"]?.Value?.ToString();
+                    if (!string.IsNullOrWhiteSpace(propAuthor)) author = propAuthor!;
+                    if (string.IsNullOrWhiteSpace(overrideTitle))
+                    {
+                        string? propTitle = props["Title"]?.Value?.ToString();
+                        if (!string.IsNullOrWhiteSpace(propTitle)) title = propTitle!;
+                    }
+                }
+                catch
+                {
+                    // Keep fallback metadata
+                }
+
+                return new DocumentDto
+                {
+                    Id = overrideId ?? $"doc-{DateTime.UtcNow:yyyyMMdd-HHmmss}",
+                    Title = string.IsNullOrWhiteSpace(title) ? "Untitled Document" : title,
+                    Metadata = new DocumentMetadataDto
+                    {
+                        Author = author,
+                        CreatedAt = DateTime.UtcNow.ToString("O"),
+                        Description = $"Extracted from Microsoft Word ({extractedParagraphs.Count} paragraphs, {extractedTables.Count} tables)",
+                        Version = 1
+                    },
+                    Content = new DocumentContentDto
+                    {
+                        Paragraphs = extractedParagraphs,
+                        Tables = extractedTables
+                    },
+                    Settings = new DocumentSettingsDto
+                    {
+                        Font = fontName,
+                        FontSize = fontSize
+                    }
+                };
+            }
+            finally
+            {
+                ReleaseComObject(contentRange);
+                ReleaseComObject(tables);
+                ReleaseComObject(paragraphs);
+                ReleaseComObject(doc);
             }
         }
 
@@ -406,28 +810,63 @@ namespace WordClient.Core.Services
                         break;
 
                     case InsertLocation.BookmarkOrContentControl:
-                        string targetBookmark = !string.IsNullOrWhiteSpace(bookmarkName) ? bookmarkName : "ResultBookmark";
-                        if (doc.Bookmarks.Exists(targetBookmark))
+                        string targetBookmark = !string.IsNullOrWhiteSpace(bookmarkName) ? bookmarkName! : "ResultBookmark";
+                        Word.Bookmarks? bookmarks = null;
+                        Word.ContentControls? contentControls = null;
+                        try
                         {
-                            var bmk = doc.Bookmarks[targetBookmark];
-                            var bmkRange = bmk.Range;
-                            bmkRange.Text = resultText;
-                            doc.Bookmarks.Add(targetBookmark, bmkRange);
-                            ReleaseComObject(bmkRange);
-                            ReleaseComObject(bmk);
+                            bookmarks = doc.Bookmarks;
+                            if (bookmarks.Exists(targetBookmark))
+                            {
+                                Word.Bookmark? bmk = null;
+                                Word.Range? bmkRange = null;
+                                Word.Bookmark? recreated = null;
+                                try
+                                {
+                                    bmk = bookmarks[targetBookmark];
+                                    bmkRange = bmk.Range;
+                                    bmkRange.Text = resultText;
+                                    recreated = bookmarks.Add(targetBookmark, bmkRange);
+                                }
+                                finally
+                                {
+                                    ReleaseComObject(recreated);
+                                    ReleaseComObject(bmkRange);
+                                    ReleaseComObject(bmk);
+                                }
+                            }
+                            else
+                            {
+                                contentControls = doc.ContentControls;
+                                if (contentControls.Count > 0)
+                                {
+                                    Word.ContentControl? cc = null;
+                                    Word.Range? ccRange = null;
+                                    try
+                                    {
+                                        cc = contentControls[1];
+                                        ccRange = cc.Range;
+                                        ccRange.Text = resultText;
+                                    }
+                                    finally
+                                    {
+                                        ReleaseComObject(ccRange);
+                                        ReleaseComObject(cc);
+                                    }
+                                }
+                                else
+                                {
+                                    // Fallback to end of document
+                                    range = doc.Content;
+                                    range.Collapse(Word.WdCollapseDirection.wdCollapseEnd);
+                                    range.Text = "\n" + resultText;
+                                }
+                            }
                         }
-                        else if (doc.ContentControls.Count > 0)
+                        finally
                         {
-                            var cc = doc.ContentControls[1];
-                            cc.Range.Text = resultText;
-                            ReleaseComObject(cc);
-                        }
-                        else
-                        {
-                            // Fallback to end of document
-                            range = doc.Content;
-                            range.Collapse(Word.WdCollapseDirection.wdCollapseEnd);
-                            range.Text = "\n" + resultText;
+                            ReleaseComObject(contentControls);
+                            ReleaseComObject(bookmarks);
                         }
                         break;
                 }
@@ -522,15 +961,17 @@ namespace WordClient.Core.Services
             var doc = GetActiveDocument();
             Word.Range? contentRange = null;
             Word.Find? find = null;
+            Word.Replacement? replacement = null;
 
             try
             {
                 contentRange = doc.Content;
                 find = contentRange.Find;
+                replacement = find.Replacement;
                 find.ClearFormatting();
-                find.Replacement.ClearFormatting();
+                replacement.ClearFormatting();
                 find.Text = findText;
-                find.Replacement.Text = replaceText;
+                replacement.Text = replaceText;
 
                 object replaceAll = Word.WdReplace.wdReplaceAll;
                 bool success = find.Execute(
@@ -544,6 +985,7 @@ namespace WordClient.Core.Services
             }
             finally
             {
+                ReleaseComObject(replacement);
                 ReleaseComObject(find);
                 ReleaseComObject(contentRange);
                 ReleaseComObject(doc);
@@ -552,6 +994,9 @@ namespace WordClient.Core.Services
 
         public static void ReleaseComObject(object? comObj)
         {
+#if NET5_0_OR_GREATER
+            if (!OperatingSystem.IsWindows()) return;
+#endif
             if (comObj != null && Marshal.IsComObject(comObj))
             {
                 try
@@ -580,12 +1025,15 @@ namespace WordClient.Core.Services
 
         public void Dispose()
         {
-            if (_ownsApplicationInstance && _wordApp != null)
+            if (_wordApp != null && _shouldReleaseApplication)
             {
                 try
                 {
-                    object saveChanges = Word.WdSaveOptions.wdDoNotSaveChanges;
-                    _wordApp.Quit(ref saveChanges);
+                    if (_ownsApplicationInstance)
+                    {
+                        object saveChanges = Word.WdSaveOptions.wdDoNotSaveChanges;
+                        _wordApp.Quit(ref saveChanges);
+                    }
                 }
                 catch
                 {

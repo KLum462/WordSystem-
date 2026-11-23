@@ -2,18 +2,19 @@
 <customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
   <ribbon>
     <tabs>
-      <tab id="tabInternship" label="Internship Word Tools">
-        <group id="grpServer" label="Server &amp; Authentication">
-          <button id="btnAuthenticate" label="Authenticate" size="large" onAction="OnAuthenticateClick" imageMso="SignDocument" screentip="Validate API Key" supertip="Validates authentication against ASP.NET Core server." />
+      <tab id="tabInternship" label="Инструменты Word">
+        <group id="grpServer" label="Сервер и авторизация">
+          <button id="btnAuthenticate" label="Авторизация" size="large" onAction="OnAuthenticateClick" imageMso="SignDocument" screentip="Проверка API-ключа" supertip="Проверяет подключение и API-ключ на сервере ASP.NET Core." />
         </group>
-        <group id="grpDocument" label="Document Management">
-          <button id="btnLoadDocument" label="Load Document" size="large" onAction="OnLoadDocumentClick" imageMso="FileOpen" screentip="Load Document" supertip="Requests JSON document from server and generates .docx using Word Interop." />
-          <button id="btnSaveTemplate" label="Save Template" size="large" onAction="OnSaveTemplateClick" imageMso="SaveSelectionToTemplateGallery" screentip="Save Template" supertip="Saves active document structure as a template on the server." />
+        <group id="grpDocument" label="Работа с документами">
+          <button id="btnLoadDocument" label="Загрузить документ" size="large" onAction="OnLoadDocumentClick" imageMso="FileOpen" screentip="Загрузить документ" supertip="Загружает JSON документа или шаблон с сервера и формирует .docx через Word Interop, либо открывает локальный файл." />
+          <button id="btnSaveTemplate" label="Сохранить шаблон" size="large" onAction="OnSaveTemplateClick" imageMso="SaveSelectionToTemplateGallery" screentip="Сохранить шаблон" supertip="Сохраняет структуру текущего документа как шаблон на сервере." />
         </group>
-        <group id="grpTextProcessing" label="Text Processing">
-          <button id="btnSendSelectedText" label="Send Selected Text" size="large" onAction="OnSendSelectedTextClick" imageMso="FormatPainter" screentip="Send Selected Text" supertip="Sends selected text to server for processing and inserts result back." />
-          <button id="btnSendDocument" label="Send Document" size="large" onAction="OnSendDocumentClick" imageMso="SendEmail" screentip="Send Document" supertip="Sends entire document to server (enforcing 100 MB limit)." />
-          <button id="btnCheckDocument" label="Check Document" size="large" onAction="OnCheckDocumentClick" imageMso="Spelling" screentip="Check Document" supertip="Inspects document statistics, empty paragraphs, and spelling." />
+        <group id="grpTextProcessing" label="Обработка и проверка">
+          <button id="btnSendSelectedText" label="Отправить выделенное" size="large" onAction="OnSendSelectedTextClick" imageMso="FormatPainter" screentip="Отправить выделенный текст" supertip="Отправляет выделенный фрагмент на сервер для обработки и вставляет результат обратно." />
+          <button id="btnSendDocument" label="Отправить документ" size="large" onAction="OnSendDocumentClick" imageMso="SendEmail" screentip="Отправить весь документ" supertip="Отправляет весь документ на сервер (с проверкой ограничения 100 МБ) и при необходимости загружает файл .docx." />
+          <button id="btnCheckDocument" label="Проверить документ" size="large" onAction="OnCheckDocumentClick" imageMso="Spelling" screentip="Проверить документ" supertip="Показывает метаданные, статистику, пустые абзацы, ошибки орфографии и позволяет выполнить поиск и замену." />
+          <button id="btnFindReplace" label="Найти и заменить" size="large" onAction="OnFindReplaceClick" imageMso="FindDialog" screentip="Поиск и замена" supertip="Выполняет поиск и замену текста по всему активному документу Word." />
         </group>
       </tab>
     </tabs>

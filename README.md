@@ -1,12 +1,14 @@
 # Word System: ASP.NET Core 8 & Microsoft Word 2016 VSTO Interop Solution
 
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
-[![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8%20(x86)-purple.svg)](https://dotnet.microsoft.com/)
-[![SQL Server 2022](https://img.shields.io/badge/SQL%20Server-2022-red.svg)](https://www.microsoft.com/sql-server/)
+[![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple.svg)](https://dotnet.microsoft.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-Default-003B57.svg)](https://www.sqlite.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supported-336791.svg)](https://www.postgresql.org/)
+[![SQL Server 2022](https://img.shields.io/badge/SQL%20Server-Supported-red.svg)](https://www.microsoft.com/sql-server/)
 [![EF Core 8](https://img.shields.io/badge/EF%20Core-8.0.13-green.svg)](https://learn.microsoft.com/ef/core/)
-[![Tests](https://img.shields.io/badge/Integration%20Tests-28%2F28%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Integration%20Tests-43%2F43%20Passed%20(87.5%25%20cov)-brightgreen.svg)]()
 
-Complete enterprise implementation of the **C# Developer Training Internship Assignment**. This repository contains a production-grade backend server built on ASP.NET Core 8 with Entity Framework Core 8 and Microsoft SQL Server 2022, accompanied by a Microsoft Word 2016 VSTO Add-In and interactive test client using Microsoft Word COM Interop.
+Complete implementation of the **C# Developer Training Internship Assignment**. This repository contains an ASP.NET Core 8 backend server with Entity Framework Core 8 (SQLite default, PostgreSQL and SQL Server supported), accompanied by a Microsoft Word 2016 VSTO/COM Add-In (`.NET Framework 4.8`, `x86`) and interactive WinForms desktop test client using Microsoft Word COM Interop.
 
 ---
 
@@ -49,29 +51,34 @@ The solution (`WordSystem.sln`) is organized into clean, decoupled layers:
 d:\СТАЖИРОВКА C#\Prod\
 │
 ├── WordServer.Api/             # ASP.NET Core 8 Web API
-│   ├── Controllers/            # Health, Auth, Documents, Text, Templates
+│   ├── App_Data/uploads/       # Stored .docx uploads (enforcing 100 MB / HTTP 413)
+│   ├── Controllers/            # Health, Auth, Documents, Text, Templates, Management
 │   ├── Data/                   # AppDbContext, Entities, DbInitializer
-│   ├── Migrations/             # EF Core 8 SQL Server schema migrations
+│   ├── Migrations/             # EF Core 8 schema migrations
 │   ├── Middleware/             # ApiKeyMiddleware, ExceptionMiddleware
-│   ├── appsettings.json        # Connection strings and API key config
-│   └── Program.cs              # Serilog, Swagger, Kestrel 100MB body configuration
+│   ├── Services/               # TextProcessingService
+│   ├── appsettings.json        # DatabaseProvider (Sqlite/Postgres/SqlServer), Storage, Auth
+│   └── Program.cs              # Serilog request/file logging, Swagger, Kestrel 100 MB limit
 │
 ├── WordClient.Core/            # Shared Library (Multi-targeting net8.0 & net48)
-│   ├── Configuration/          # ClientConfig (reads app.config / appsettings)
-│   ├── Models/                 # DocumentDto, TemplateDto, Request/Response contracts
+│   ├── Configuration/          # ClientConfig (reads add-in dll.config / App.config)
+│   ├── Models/                 # DocumentDto, TemplateDto, Upload & Check DTOs
 │   └── Services/               # ApiClient (3 retries, 30s timeout), WordDocumentService, ClientLogger
 │
-├── WordVstoAddIn/              # Word 2016 VSTO Add-in (.NET Framework 4.8, x86)
+├── WordVstoAddIn/              # Word 2016 VSTO/COM Add-in (.NET Framework 4.8, x86)
 │   ├── Ribbon.cs / Ribbon.xml  # Custom Office Ribbon tab with 6 required buttons
+│   ├── RibbonDialogs.cs        # Document/Template loader, Processing, Inspection + Find & Replace
+│   ├── ComAddInConnect.cs      # Native Word COM Add-In entry point (IDTExtensibility2)
 │   ├── ThisAddIn.cs            # Add-In lifecycle and COM release handlers
-│   └── App.config              # Client connection settings and API key
+│   ├── Register-WordAddIn.ps1  # Auto-detects Office arch and registers add-in
+│   └── App.config              # Client connection settings and API key (copied to dll.config)
 │
 ├── WordClient.TestApp/         # Interactive WinForms Desktop Client (.NET 8 Windows Forms)
-│   ├── Form1.cs                # GUI testing all 6 operations with live logs
+│   ├── Form1.cs                # GUI testing all operations, .docx Open/SaveAs2/Upload & live logs
 │   └── App.config              # Connection settings
 │
 └── WordServer.Tests/           # Integration Test Project (.NET 8 xUnit)
-    └── ServerIntegrationTests.cs # 28 integration tests using WebApplicationFactory & TestServer
+    └── ServerIntegrationTests.cs # 43 integration tests (WebApplicationFactory + SQLite in-memory)
 ```
 
 ---
@@ -137,17 +144,9 @@ The database schema includes the 5 required tables:
 
 ## 5. Database Provider Switching
 
-The server supports switching between database engines via the `DatabaseProvider` configuration key in `appsettings.json`:
+The server supports switching between database engines via the `DatabaseProvider` key in `WordServer.Api/appsettings.json`:
 
-### Microsoft SQL Server 2022 (Default):
-```json
-"DatabaseProvider": "SqlServer",
-"ConnectionStrings": {
-  "DefaultConnection": "Server=localhost;Database=WordSystemDb;Integrated Security=True;TrustServerCertificate=True;"
-}
-```
-
-### SQLite (Zero-configuration file database):
+### SQLite (Default — zero-configuration file database):
 ```json
 "DatabaseProvider": "Sqlite",
 "ConnectionStrings": {
@@ -155,8 +154,22 @@ The server supports switching between database engines via the `DatabaseProvider
 }
 ```
 
-### PostgreSQL (Optional):
-Install `Npgsql.EntityFrameworkCore.PostgreSQL`, add `"NpgsqlConnection": "Host=localhost;Database=WordSystemDb;Username=postgres;Password=yourpass"`, and select `"DatabaseProvider": "Postgres"`.
+### PostgreSQL (Supported out of the box):
+```json
+"DatabaseProvider": "Postgres",
+"ConnectionStrings": {
+  "PostgresConnection": "Host=localhost;Port=5432;Database=WordSystemDb;Username=postgres;Password=postgres"
+}
+```
+(`Npgsql.EntityFrameworkCore.PostgreSQL` is pre-installed and configured with automatic retry on transient failures.)
+
+### Microsoft SQL Server 2022 (Optional):
+```json
+"DatabaseProvider": "SqlServer",
+"ConnectionStrings": {
+  "DefaultConnection": "Server=localhost;Database=WordSystemDb;Integrated Security=True;TrustServerCertificate=True;"
+}
+```
 
 ---
 
@@ -173,20 +186,13 @@ Once started:
 - Health check: `http://localhost:5000/api/health`
 - Server log files are written daily to: `WordServer.Api/bin/Debug/net8.0/logs/server-YYYYMMDD.log`
 
-### Configuring API Keys:
-In `appsettings.json`:
-```json
-"Authentication": {
-  "ApiKeys": [
-    "secret-internship-api-key-2026",
-    "internship-key-demo"
-  ]
-}
-```
-All protected endpoints require the HTTP header:
-```http
-X-API-Key: secret-internship-api-key-2026
-```
+### Configuring Authentication & HTTPS:
+Authentication validates `X-API-Key` directly against active accounts in the `Users` database table (`IsActive = true`). Default seeded accounts:
+- `admin` (`Admin` role) — `secret-internship-api-key-2026`
+- `ivan_intern` (`Intern` role) — `internship-key-demo`
+
+Users can be created and activated/deactivated dynamically via `POST /api/management/users` and `PATCH /api/management/users/{id}/status`.
+To enable HTTPS redirection in production, set `"Security": { "EnableHttpsRedirection": true }` in `appsettings.json` (and run with `--urls "https://localhost:5001;http://localhost:5000"`).
 
 ---
 
@@ -194,18 +200,30 @@ X-API-Key: secret-internship-api-key-2026
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | No | Server and SQL Server health check |
-| `POST` | `/api/auth/validate` | Yes | Validates client API key |
+| `GET` | `/api/health` | No | Server and database health check |
+| `POST` | `/api/auth/validate` | Yes | Validates user API key against `Users` table, returns user & role |
+| `GET` | `/api/documents` | Yes | Lists all documents with author & version summary |
 | `GET` | `/api/documents/{id}` | Yes | Retrieves document JSON (`doc-001`) |
-| `POST` | `/api/documents` | Yes | Creates and persists new document |
-| `POST` | `/api/text/process` | Yes | Processes selected text (`uppercase`, `reverse`, etc.) |
-| `POST` | `/api/documents/process` | Yes | Processes full document text (enforcing 100 MB limit) |
-| `POST` | `/api/documents/check` | Yes | Validates words, paragraphs, tables, empty paragraphs |
-| `GET` | `/api/templates` | Yes | Lists all document templates |
+| `POST` | `/api/documents` | Yes | Creates document, metadata, and v1 snapshot in `DocumentVersions` |
+| `PUT` | `/api/documents/{id}` | Yes | Updates document and creates next version in `DocumentVersions` |
+| `GET` | `/api/text/operations` | Yes | Lists all 12 supported processing operations |
+| `POST` | `/api/text/process` | Yes | Processes text (`uppercase`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats`, etc.) and logs to `ProcessingHistory` |
+| `POST` | `/api/documents/process` | Yes | Processes full document text (100 MB limit -> `413`) and logs to `ProcessingHistory` |
+| `POST` | `/api/documents/upload` | Yes | Uploads `.docx` file to `App_Data/uploads` (100 MB limit -> `413`) |
+| `GET` | `/api/documents/uploads` | Yes | Lists uploaded `.docx` files stored in `App_Data/uploads` |
+| `GET` | `/api/documents/uploads/{fileName}` | Yes | Downloads an uploaded `.docx` file from `App_Data/uploads` |
+| `POST` | `/api/documents/check` | Yes | Quality & PII inspection (empty paragraphs, double spaces, long sentences, emails/phones) |
+| `GET` | `/api/templates` | Yes | Lists templates (supports `?categoryId=` filter) |
 | `GET` | `/api/templates/{id}` | Yes | Retrieves template by ID (also `/api/template/{id}`) |
-| `POST` | `/api/templates` | Yes | Creates new template (also `/api/template/`) |
+| `POST` | `/api/templates` | Yes | Creates new template with optional `categoryId` |
 | `PUT` | `/api/templates/{id}` | Yes | Updates template by ID |
 | `DELETE` | `/api/templates/{id}` | Yes | Deletes template by ID |
+| `GET/POST/PATCH` | `/api/management/users` | Yes | Manage API users and active status (`/{id}/status`) |
+| `GET/POST` | `/api/management/categories` | Yes | Manage template categories |
+| `GET` | `/api/management/versions/{docId}` | Yes | View document version history |
+| `GET/POST/PATCH` | `/api/management/comments` | Yes | View, create, and resolve document comments |
+| `GET` | `/api/management/history` | Yes | Audit log of all text/document processing operations |
+| `GET/PUT` | `/api/management/settings` | Yes | Read and update key-value system settings |
 
 ### Document JSON Response Example (`GET /api/documents/doc-001`):
 ```json
@@ -253,17 +271,28 @@ The VSTO Add-in project is located in `WordVstoAddIn/`.
 
 ### Required Ribbon Buttons:
 The custom Ribbon tab **"Internship Word Tools"** exposes 6 buttons:
-1. **"Authenticate"**: Sends API key to `/api/auth/validate`, verifying credentials and server status.
-2. **"Load Document"**: Fetches `doc-001` JSON from `/api/documents/doc-001` and generates a styled `.docx` document in Word.
-3. **"Send Selected Text"**: Reads `Selection.Range.Text`, posts to `/api/text/process`, and inserts the processed string back into the selection.
-4. **"Send Document"**: Reads active document text, enforces 100 MB limit, sends to `/api/documents/process`, and inserts the result at document end.
-5. **"Check Document"**: Inspects words, paragraphs, empty paragraphs, tables, and spell-check via Word Interop and `/api/documents/check`.
-6. **"Save Template"**: Extracts active document structure and saves it to the SQL Server template store via `/api/templates`.
+1. **"Authenticate"**: Sends API key (read from `WordVstoAddIn/App.config` / `WordVstoAddIn.dll.config`) to `/api/auth/validate`, verifying credentials, user role, and client log location.
+2. **"Load Document"**: Generates a styled `.docx` from server document JSON (`doc-001`) or server template (with optional `SaveAs2` to `.docx`), or opens an existing local `.docx` file with lock & 100 MB validation.
+3. **"Send Selected Text"**: Reads `Selection.Range.Text`, posts to `/api/text/process`, and inserts the result at the chosen target (Selected Range, End of Document, or Bookmark / Content Control).
+4. **"Send Document"**: Validates 100 MB limit (both file size and UTF-8 text), sends document text to `/api/documents/process`, inserts result, and optionally uploads the `.docx` file to `App_Data/uploads` (`POST /api/documents/upload`).
+5. **"Check Document"**: Shows document metadata (`Title`, `Author`, `CreationDate`), word/paragraph/empty-paragraph/table counts, Word spell-check errors, server quality issues, and includes an inline **Find & Replace...** action.
+6. **"Save Template"**: Extracts active document paragraphs, styles, tables, font/size, and metadata and saves it to the server template store via `/api/templates`.
 
-### Building the Add-In:
-```powershell
-dotnet build WordVstoAddIn/WordVstoAddIn.csproj
-```
+### Building, Debugging (Visual Studio F5) & Registering the Add-In:
+- **Where to configure API Key & Server URL:** Edit `WordVstoAddIn/App.config` (copied automatically to `WordVstoAddIn.dll.config`).
+- **Build (`x86` default per spec):**
+  ```powershell
+  dotnet build WordVstoAddIn/WordVstoAddIn.csproj
+  ```
+- **Register in Microsoft Word** (run PowerShell as Administrator; auto-detects x86/x64 Office or pass `-OfficeArch x86` / `-OfficeArch x64`):
+  ```powershell
+  .\WordVstoAddIn\Register-WordAddIn.ps1
+  ```
+- **Run/Debug from Visual Studio:** Open `WordSystem.sln`, set `WordVstoAddIn` as Startup Project, choose the matching Word launch profile (`Microsoft Word (x86)` or `Microsoft Word (x64)`), and press **F5**.
+- **Unregister cleanly:**
+  ```powershell
+  .\WordVstoAddIn\Unregister-WordAddIn.ps1
+  ```
 
 ---
 
@@ -328,7 +357,7 @@ The client strictly adheres to Microsoft Word COM Interop best practices:
 
 ## 12. Integration Tests & Code Coverage
 
-Integration tests use `WebApplicationFactory<Program>` and an isolated test database to achieve **>50% server logic coverage**.
+Integration tests use `WebApplicationFactory<Program>`, `TestServer`, and **SQLite in-memory** (`DataSource=:memory:`) to achieve **87.51% line coverage** (63.65% branch coverage) of `WordServer.Api` server logic — well above the ≥ 50% requirement.
 
 ### Running Tests:
 ```powershell
@@ -336,18 +365,19 @@ dotnet test WordServer.Tests/WordServer.Tests.csproj --collect:"XPlat Code Cover
 ```
 
 ### Test Suite Summary:
-- **Total Tests:** 28 passed (0 failed, 0 skipped)
+- **Total Tests:** 43 passed (0 failed, 0 skipped)
 - **Covered Scenarios:**
   - Health check endpoint
-  - API Key authentication (valid, invalid, missing)
-  - Document retrieval (`doc-001` schema compliance)
-  - Document 404 responses
-  - Text processing (`uppercase`, `lowercase`, `reverse`, `word_count`, `trim`, `capitalize`)
-  - Document processing and paragraph statistics
-  - Document checking (empty paragraph detection, word counts, issues list)
-  - Full CRUD lifecycle for Templates (`POST`, `GET by ID`, `GET All`, `PUT`, `DELETE`, `404 verification`)
-  - Malformed JSON handling without server crash
-  - Server-side 100 MB limit validation
+  - API Key authentication (valid DB users, roles, deactivation, invalid, missing)
+  - Document retrieval (`doc-001` schema compliance), creation, versioning, and 404 responses
+  - Text processing (`uppercase`, `lowercase`, `reverse`, `word_count`, `trim`, `capitalize`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats`)
+  - Document processing, paragraph statistics, and `413 Payload Too Large` limit enforcement
+  - `.docx` file upload to `App_Data/uploads` (`POST /api/documents/upload`), listing, download, extension validation (`400`), and size limit (`413`)
+  - Document checking (empty paragraphs, double spaces, PII detection)
+  - Full CRUD lifecycle for Templates on both `/api/templates` and `/api/template/{id}`
+  - Malformed JSON (`400`) and global `ExceptionMiddleware` (`400`, `413`, `500`) handling
+  - Management endpoints (users, categories, comments, settings, processing history)
+  - Client configuration loading from add-in `.config` file and client-side 100 MB enforcement
 
 ---
 
@@ -392,6 +422,6 @@ Follow these steps during the final demonstration:
 | 7 | Sending selected text & entire document; inserting results | `TextController.cs`, `InsertResult` at selection/end/bookmark |
 | 8 | Document templates CRUD, metadata & settings | `TemplatesController.cs`, `TemplateEntity`, `MetadataEntity` |
 | 9 | Error handling, retries, timeouts, file logging | 3-retry backoff, 30s timeout, Serilog & `ClientLogger` |
-| 10 | Integration testing (>= 50% server coverage) | 28 xUnit tests with `WebApplicationFactory` (>51% coverage) |
-| 11 | Enforcement of 100 MB limit & documentation | Client and server 100 MB limits, `README.md`, `INSTALL.md` |
+| 10 | Integration testing (>= 50% server coverage) | 43 xUnit tests with `WebApplicationFactory` & SQLite in-memory (87.5% server coverage) |
+| 11 | Enforcement of 100 MB limit, `App_Data/uploads` & documentation | Client and server 100 MB / `413` limits, `App_Data/uploads`, `README.md`, `INSTALL.md` |
 | 12 | Final demonstration & deliverables on `master` branch | Complete repository on Git `master` branch |

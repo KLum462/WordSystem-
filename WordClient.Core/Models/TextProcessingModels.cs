@@ -2,6 +2,7 @@ namespace WordClient.Core.Models
 {
     public class TextProcessRequest
     {
+        public string? DocumentId { get; set; }
         public string Text { get; set; } = string.Empty;
         public string Operation { get; set; } = "uppercase";
     }

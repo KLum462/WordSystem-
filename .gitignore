@@ -43,3 +43,7 @@ publish/
 *.db-shm
 *.db-wal
 *.log
+
+# Uploaded user files (keep directory placeholder)
+WordServer.Api/App_Data/uploads/*
+!WordServer.Api/App_Data/uploads/.gitkeep

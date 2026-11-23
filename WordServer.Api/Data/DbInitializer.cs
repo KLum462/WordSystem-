@@ -90,6 +90,22 @@ namespace WordServer.Api.Data
                 });
             }
 
+            // Seed Template Categories before Templates so we can assign default CategoryId
+            if (!await context.TemplateCategories.AnyAsync())
+            {
+                context.TemplateCategories.AddRange(
+                    new TemplateCategoryEntity { Name = "Отчеты (Reports)", Description = "Корпоративные и квартальные отчеты", CreatedAt = DateTime.UtcNow },
+                    new TemplateCategoryEntity { Name = "Договоры (Contracts)", Description = "Договоры подряда и соглашения", CreatedAt = DateTime.UtcNow },
+                    new TemplateCategoryEntity { Name = "Служебные записки (Memos)", Description = "Внутренний документооборот", CreatedAt = DateTime.UtcNow }
+                );
+                await context.SaveChangesAsync();
+            }
+
+            var reportsCategoryId = await context.TemplateCategories
+                .Where(c => c.Name.Contains("Reports"))
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync();
+
             // Seed sample template tpl-001 if not present
             if (!await context.Templates.AnyAsync(t => t.Id == "tpl-001"))
             {
@@ -134,6 +150,7 @@ namespace WordServer.Api.Data
                     Id = "tpl-001",
                     Name = "Quarterly Status Report Template",
                     Description = "Standard corporate template with milestones and deliverables table",
+                    CategoryId = reportsCategoryId,
                     DocumentStructureJson = JsonSerializer.Serialize(templateContent, JsonOptions),
                     SettingsJson = JsonSerializer.Serialize(templateSettings, JsonOptions),
                     MetadataJson = JsonSerializer.Serialize(templateMetadata, JsonOptions),
@@ -191,15 +208,7 @@ namespace WordServer.Api.Data
                 );
             }
 
-            // Seed Template Categories
-            if (!await context.TemplateCategories.AnyAsync())
-            {
-                context.TemplateCategories.AddRange(
-                    new TemplateCategoryEntity { Name = "Отчеты (Reports)", Description = "Корпоративные и квартальные отчеты", CreatedAt = DateTime.UtcNow },
-                    new TemplateCategoryEntity { Name = "Договоры (Contracts)", Description = "Договоры подряда и соглашения", CreatedAt = DateTime.UtcNow },
-                    new TemplateCategoryEntity { Name = "Служебные записки (Memos)", Description = "Внутренний документооборот", CreatedAt = DateTime.UtcNow }
-                );
-            }
+            // Template Categories already seeded above before Templates
 
             // Seed Document Version for doc-001
             if (!await context.DocumentVersions.AnyAsync(v => v.DocumentId == "doc-001"))

@@ -33,13 +33,21 @@ namespace WordServer.Api.Middleware
                 _logger.LogWarning(badHttpEx, "Bad HTTP request: {Message}", badHttpEx.Message);
 
                 int statusCode = badHttpEx.StatusCode != 0 ? badHttpEx.StatusCode : (int)HttpStatusCode.BadRequest;
-                if (badHttpEx.Message.Contains("exceeds the maximum allow", StringComparison.OrdinalIgnoreCase) ||
+                if (badHttpEx.Message.Contains("exceeds the maximum", StringComparison.OrdinalIgnoreCase) ||
+                    badHttpEx.Message.Contains("too large", StringComparison.OrdinalIgnoreCase) ||
                     badHttpEx.StatusCode == (int)HttpStatusCode.RequestEntityTooLarge)
                 {
                     statusCode = (int)HttpStatusCode.RequestEntityTooLarge; // 413
                 }
 
                 await WriteErrorResponseAsync(context, statusCode, badHttpEx.Message);
+            }
+            catch (InvalidDataException invalidDataEx) when (
+                invalidDataEx.Message.Contains("length limit", StringComparison.OrdinalIgnoreCase) ||
+                invalidDataEx.Message.Contains("exceeded", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(invalidDataEx, "Multipart payload exceeds maximum allowed size: {Message}", invalidDataEx.Message);
+                await WriteErrorResponseAsync(context, (int)HttpStatusCode.RequestEntityTooLarge, "Uploaded file exceeds the maximum allowed size of 100 MB.");
             }
             catch (JsonException jsonEx)
             {
@@ -50,7 +58,7 @@ namespace WordServer.Api.Middleware
             {
                 _logger.LogError(ex, "Unhandled server error: {Message}", ex.Message);
 
-                // Save to database Logs table if possible
+               
                 try
                 {
                     using var scope = context.RequestServices.CreateScope();
@@ -70,7 +78,7 @@ namespace WordServer.Api.Middleware
                 }
                 catch
                 {
-                    // Prevent logging failure from masking the error
+                    
                 }
 
                 await WriteErrorResponseAsync(context, (int)HttpStatusCode.InternalServerError, "An internal server error occurred.");

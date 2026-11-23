@@ -11,6 +11,7 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using WordServer.Api.Data;
 using WordServer.Api.Middleware;
+using WordServer.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,16 +44,28 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = maxBodySizeBytes;
 });
 
-// Configure Database (SQL Server 2022 default, SQLite supported)
-var dbProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "SqlServer";
+// Configure Database (SQLite default, PostgreSQL and SQL Server supported)
+var dbProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
 var sqlServerConnection = builder.Configuration.GetConnectionString("DefaultConnection");
 var sqliteConnection = builder.Configuration.GetConnectionString("SqliteConnection") ?? "Data Source=WordSystem.db";
+var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     if (dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
     {
         options.UseSqlite(sqliteConnection);
+    }
+    else if (dbProvider.Equals("Postgres", StringComparison.OrdinalIgnoreCase) ||
+             dbProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
+    {
+        options.UseNpgsql(postgresConnection, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorCodesToAdd: null);
+        });
     }
     else
     {
@@ -65,6 +78,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         });
     }
 });
+
+// Register domain services
+builder.Services.AddSingleton<TextProcessingService>();
 
 // Configure Controllers
 builder.Services.AddControllers()
@@ -87,7 +103,7 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
-        Description = "API Key authentication using X-API-Key header. Example: 'secret-internship-api-key-2026'",
+        Description = "API Key authentication using X-API-Key header. Provide an active user API key from the Users table.",
         Type = SecuritySchemeType.ApiKey,
         Name = "X-API-Key",
         In = ParameterLocation.Header,
@@ -112,6 +128,13 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Ensure App_Data/uploads directory exists
+var uploadsRelPath = builder.Configuration.GetValue<string>("Storage:UploadsPath") ?? Path.Combine("App_Data", "uploads");
+var uploadsFullPath = Path.IsPathRooted(uploadsRelPath)
+    ? uploadsRelPath
+    : Path.Combine(app.Environment.ContentRootPath, uploadsRelPath);
+Directory.CreateDirectory(uploadsFullPath);
+
 // Enable Swagger in Development and Production
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -122,6 +145,21 @@ app.UseSwaggerUI(c =>
 
 // Global exception handling
 app.UseMiddleware<ExceptionMiddleware>();
+
+// Log every HTTP request (method, path, status, duration) to file and console
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+});
+
+if (builder.Configuration.GetValue<bool>("Security:EnableHttpsRedirection", false))
+{
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+    }
+    app.UseHttpsRedirection();
+}
 
 app.UseRouting();
 

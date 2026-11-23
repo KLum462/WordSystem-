@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Microsoft Word (x86)": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\WINWORD.EXE"
+    },
+    "Microsoft Word (x64)": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE"
+    }
+  }
+}

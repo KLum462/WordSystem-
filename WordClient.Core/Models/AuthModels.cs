@@ -10,5 +10,7 @@ namespace WordClient.Core.Models
         public bool Valid { get; set; }
         public string Message { get; set; } = string.Empty;
         public string? User { get; set; }
+        public string? FullName { get; set; }
+        public string? Role { get; set; }
     }
 }

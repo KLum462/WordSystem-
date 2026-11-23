@@ -30,9 +30,15 @@ namespace WordServer.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAllTemplates()
+        public async Task<IActionResult> GetAllTemplates([FromQuery] int? categoryId = null)
         {
-            var entities = await _db.Templates.OrderByDescending(t => t.CreatedAt).ToListAsync();
+            var query = _db.Templates.AsQueryable();
+            if (categoryId.HasValue)
+            {
+                query = query.Where(t => t.CategoryId == categoryId.Value);
+            }
+
+            var entities = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
             var dtos = entities.Select(MapToDto).ToList();
             return Ok(dtos);
         }
@@ -77,11 +83,17 @@ namespace WordServer.Api.Controllers
                 return Conflict(new ErrorResponse { Error = $"Template with ID '{dto.Id}' already exists." });
             }
 
+            if (dto.CategoryId.HasValue && !await _db.TemplateCategories.AnyAsync(c => c.Id == dto.CategoryId.Value))
+            {
+                return BadRequest(new ErrorResponse { Error = $"Template category #{dto.CategoryId.Value} does not exist." });
+            }
+
             var entity = new TemplateEntity
             {
                 Id = dto.Id,
                 Name = dto.Name,
                 Description = dto.Description,
+                CategoryId = dto.CategoryId,
                 DocumentStructureJson = JsonSerializer.Serialize(dto.Content, JsonOptions),
                 SettingsJson = JsonSerializer.Serialize(dto.Settings, JsonOptions),
                 MetadataJson = JsonSerializer.Serialize(dto.Metadata, JsonOptions),
@@ -110,6 +122,14 @@ namespace WordServer.Api.Controllers
 
             entity.Name = string.IsNullOrWhiteSpace(dto.Name) ? entity.Name : dto.Name;
             entity.Description = dto.Description ?? entity.Description;
+            if (dto.CategoryId.HasValue)
+            {
+                if (!await _db.TemplateCategories.AnyAsync(c => c.Id == dto.CategoryId.Value))
+                {
+                    return BadRequest(new ErrorResponse { Error = $"Template category #{dto.CategoryId.Value} does not exist." });
+                }
+                entity.CategoryId = dto.CategoryId;
+            }
             if (dto.Content != null)
             {
                 entity.DocumentStructureJson = JsonSerializer.Serialize(dto.Content, JsonOptions);
@@ -156,6 +176,7 @@ namespace WordServer.Api.Controllers
                 Id = entity.Id,
                 Name = entity.Name,
                 Description = entity.Description,
+                CategoryId = entity.CategoryId,
                 Content = JsonSerializer.Deserialize<DocumentContentDto>(entity.DocumentStructureJson, JsonOptions) ?? new DocumentContentDto(),
                 Settings = JsonSerializer.Deserialize<DocumentSettingsDto>(entity.SettingsJson, JsonOptions) ?? new DocumentSettingsDto(),
                 Metadata = JsonSerializer.Deserialize<DocumentMetadataDto>(entity.MetadataJson, JsonOptions) ?? new DocumentMetadataDto(),

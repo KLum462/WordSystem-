@@ -27,8 +27,8 @@ namespace WordClient.TestApp
 
         private void InitializeComponent()
         {
-            this.Text = "Microsoft Word Interop & ASP.NET Core Integration Test Client";
-            this.Size = new Size(880, 680);
+            this.Text = "Клиент интеграции Microsoft Word Interop и ASP.NET Core";
+            this.Size = new Size(920, 700);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
@@ -40,13 +40,13 @@ namespace WordClient.TestApp
                 Padding = new Padding(10)
             };
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 130F));
-            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 140F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 165F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             // Config Group Box
             var grpConfig = new GroupBox
             {
-                Text = "Connection & Settings",
+                Text = "Подключение и настройки",
                 Dock = DockStyle.Fill
             };
             var configLayout = new TableLayoutPanel
@@ -61,22 +61,27 @@ namespace WordClient.TestApp
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
 
-            _txtServerUrl = new TextBox { Text = "http://localhost:5000", Dock = DockStyle.Fill };
-            _txtApiKey = new TextBox { Text = "secret-internship-api-key-2026", Dock = DockStyle.Fill };
+            var loadedCfg = ClientConfig.LoadFromConfiguration();
+            _txtServerUrl = new TextBox { Text = loadedCfg.ServerUrl, Dock = DockStyle.Fill };
+            _txtApiKey = new TextBox { Text = loadedCfg.ApiKey, Dock = DockStyle.Fill };
             _txtDocId = new TextBox { Text = "doc-001", Dock = DockStyle.Fill };
 
             _cmbOperation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _cmbOperation.Items.AddRange(new object[] { "uppercase", "lowercase", "reverse", "trim", "word_count", "title_case" });
+            _cmbOperation.Items.AddRange(new object[]
+            {
+                "uppercase", "lowercase", "reverse", "trim", "word_count", "title_case", "capitalize",
+                "normalize", "anonymize", "extract_entities", "summarize", "stats"
+            });
             _cmbOperation.SelectedIndex = 0;
 
-            configLayout.Controls.Add(new Label { Text = "Server URL:", Anchor = AnchorStyles.Left }, 0, 0);
+            configLayout.Controls.Add(new Label { Text = "Адрес сервера:", Anchor = AnchorStyles.Left }, 0, 0);
             configLayout.Controls.Add(_txtServerUrl, 1, 0);
-            configLayout.Controls.Add(new Label { Text = "API Key:", Anchor = AnchorStyles.Left }, 2, 0);
+            configLayout.Controls.Add(new Label { Text = "API-ключ:", Anchor = AnchorStyles.Left }, 2, 0);
             configLayout.Controls.Add(_txtApiKey, 3, 0);
 
-            configLayout.Controls.Add(new Label { Text = "Document ID:", Anchor = AnchorStyles.Left }, 0, 1);
+            configLayout.Controls.Add(new Label { Text = "ID документа:", Anchor = AnchorStyles.Left }, 0, 1);
             configLayout.Controls.Add(_txtDocId, 1, 1);
-            configLayout.Controls.Add(new Label { Text = "Operation:", Anchor = AnchorStyles.Left }, 2, 1);
+            configLayout.Controls.Add(new Label { Text = "Операция:", Anchor = AnchorStyles.Left }, 2, 1);
             configLayout.Controls.Add(_cmbOperation, 3, 1);
 
             grpConfig.Controls.Add(configLayout);
@@ -84,7 +89,7 @@ namespace WordClient.TestApp
             // Ribbon Buttons Group Box
             var grpActions = new GroupBox
             {
-                Text = "Required Ribbon Actions (Word 2016 Interop & API)",
+                Text = "Действия (Word 2016 Interop и API)",
                 Dock = DockStyle.Fill
             };
             var flowActions = new FlowLayoutPanel
@@ -94,18 +99,22 @@ namespace WordClient.TestApp
                 AutoScroll = true
             };
 
-            var btnAuth = CreateButton("1. Authenticate", OnAuthenticateClick, Color.LightSteelBlue);
-            var btnLoadDoc = CreateButton("2. Load Document", OnLoadDocumentClick, Color.LightGreen);
-            var btnSendSelected = CreateButton("3. Send Selected Text", OnSendSelectedTextClick, Color.LightGoldenrodYellow);
-            var btnSendDoc = CreateButton("4. Send Document", OnSendDocumentClick, Color.Khaki);
-            var btnCheckDoc = CreateButton("5. Check Document", OnCheckDocumentClick, Color.LightSkyBlue);
-            var btnSaveTemplate = CreateButton("6. Save Template", OnSaveTemplateClick, Color.LightSalmon);
+            var btnAuth = CreateButton("1. Авторизация", OnAuthenticateClick, Color.LightSteelBlue);
+            var btnLoadDoc = CreateButton("2. Загрузить документ", OnLoadDocumentClick, Color.LightGreen);
+            var btnSendSelected = CreateButton("3. Отправить выделенное", OnSendSelectedTextClick, Color.LightGoldenrodYellow);
+            var btnSendDoc = CreateButton("4. Отправить документ", OnSendDocumentClick, Color.Khaki);
+            var btnCheckDoc = CreateButton("5. Проверить документ", OnCheckDocumentClick, Color.LightSkyBlue);
+            var btnSaveTemplate = CreateButton("6. Сохранить шаблон", OnSaveTemplateClick, Color.LightSalmon);
 
-            var btnOpenWord = CreateButton("Open/Create Word", OnOpenWordClick, Color.WhiteSmoke);
-            var btnFindReplace = CreateButton("Find & Replace", OnFindReplaceClick, Color.WhiteSmoke);
+            var btnOpenWord = CreateButton("Создать документ Word", OnOpenWordClick, Color.WhiteSmoke);
+            var btnOpenDocx = CreateButton("Открыть .docx", OnOpenDocxClick, Color.WhiteSmoke);
+            var btnSaveDocx = CreateButton("Сохранить .docx", OnSaveDocxClick, Color.WhiteSmoke);
+            var btnUploadDocx = CreateButton("Загрузить .docx", OnUploadDocxClick, Color.Moccasin);
+            var btnLoadTemplate = CreateButton("Загрузить шаблон", OnLoadTemplateClick, Color.LightCyan);
+            var btnFindReplace = CreateButton("Найти и заменить", OnFindReplaceClick, Color.WhiteSmoke);
 
-            _cmbInsertLocation = new ComboBox { Width = 170, DropDownStyle = ComboBoxStyle.DropDownList };
-            _cmbInsertLocation.Items.AddRange(new object[] { "Selected Range", "End of Document", "Bookmark/Content Control" });
+            _cmbInsertLocation = new ComboBox { Width = 190, DropDownStyle = ComboBoxStyle.DropDownList };
+            _cmbInsertLocation.Items.AddRange(new object[] { "Выделенный диапазон", "Конец документа", "Закладка / Content Control" });
             _cmbInsertLocation.SelectedIndex = 0;
 
             flowActions.Controls.Add(btnAuth);
@@ -115,8 +124,12 @@ namespace WordClient.TestApp
             flowActions.Controls.Add(btnCheckDoc);
             flowActions.Controls.Add(btnSaveTemplate);
             flowActions.Controls.Add(btnOpenWord);
+            flowActions.Controls.Add(btnOpenDocx);
+            flowActions.Controls.Add(btnSaveDocx);
+            flowActions.Controls.Add(btnUploadDocx);
+            flowActions.Controls.Add(btnLoadTemplate);
             flowActions.Controls.Add(btnFindReplace);
-            flowActions.Controls.Add(new Label { Text = "Insert Target:", AutoSize = true, Margin = new Padding(10, 8, 4, 0) });
+            flowActions.Controls.Add(new Label { Text = "Куда вставить:", AutoSize = true, Margin = new Padding(10, 8, 4, 0) });
             flowActions.Controls.Add(_cmbInsertLocation);
 
             grpActions.Controls.Add(flowActions);
@@ -124,7 +137,7 @@ namespace WordClient.TestApp
             // Logs Group Box
             var grpLogs = new GroupBox
             {
-                Text = "Execution Logs & Output",
+                Text = "Журнал выполнения и логи",
                 Dock = DockStyle.Fill
             };
             _txtLog = new TextBox
@@ -150,7 +163,7 @@ namespace WordClient.TestApp
             var btn = new Button
             {
                 Text = text,
-                Width = 150,
+                Width = 165,
                 Height = 36,
                 Margin = new Padding(4),
                 BackColor = backColor,
@@ -192,22 +205,33 @@ namespace WordClient.TestApp
             }));
         }
 
+        private static string FormatLocation(InsertLocation loc) => loc switch
+        {
+            InsertLocation.SelectedRange => "выделенный диапазон",
+            InsertLocation.EndOfDocument => "конец документа",
+            InsertLocation.BookmarkOrContentControl => "закладку / Content Control",
+            _ => loc.ToString()
+        };
+
         private async void OnAuthenticateClick(object? sender, EventArgs e)
         {
             try
             {
                 using var api = new ApiClient(GetCurrentConfig());
-                bool ok = await api.ValidateAuthAsync();
+                var auth = await api.ValidateAuthDetailedAsync();
+                bool ok = auth?.Valid ?? false;
                 MessageBox.Show(
-                    ok ? "Authentication Succeeded! Server accepted API key." : "Authentication Failed! Invalid API key.",
-                    "Authentication",
+                    ok
+                        ? $"Авторизация прошла успешно!\r\nПользователь: {auth!.FullName ?? auth.User} ({auth.Role ?? "User"})"
+                        : $"Ошибка авторизации! {auth?.Message ?? "Неверный API-ключ."}",
+                    "Авторизация",
                     MessageBoxButtons.OK,
                     ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Auth error", ex);
-                MessageBox.Show($"Authentication error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка авторизации: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -220,14 +244,15 @@ namespace WordClient.TestApp
                 var doc = await api.GetDocumentAsync(docId);
 
                 var word = GetWordService();
-                word.GenerateDocumentFromDto(doc);
+                var createdDoc = word.GenerateDocumentFromDto(doc);
+                WordDocumentService.ReleaseComObject(createdDoc);
 
-                MessageBox.Show($"Document '{doc.Title}' loaded and generated in Word successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"Документ «{doc.Title}» успешно загружен и сформирован в Word!", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Load document error", ex);
-                MessageBox.Show($"Failed to load document: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Не удалось загрузить документ: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -240,23 +265,23 @@ namespace WordClient.TestApp
 
                 if (string.IsNullOrWhiteSpace(selectedText))
                 {
-                    MessageBox.Show("Please select some text in the active Word document first.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Сначала выделите фрагмент текста в активном документе Word.", "Текст не выделен", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 string op = _cmbOperation.SelectedItem?.ToString() ?? "uppercase";
                 using var api = new ApiClient(GetCurrentConfig());
-                string result = await api.ProcessSelectedTextAsync(selectedText, op);
+                string result = await api.ProcessSelectedTextAsync(selectedText, op, _txtDocId.Text.Trim());
 
                 var loc = (InsertLocation)_cmbInsertLocation.SelectedIndex;
                 word.InsertResult(result, loc);
 
-                MessageBox.Show($"Processed text ({op}) and inserted back into document at {loc}!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"Текст обработан ({op}) и вставлен в {FormatLocation(loc)}!", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Send selected text error", ex);
-                MessageBox.Show($"Error processing text: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка обработки текста: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -269,7 +294,7 @@ namespace WordClient.TestApp
 
                 if (string.IsNullOrWhiteSpace(docText))
                 {
-                    MessageBox.Show("The active Word document is empty.", "Empty Document", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("Активный документ Word пуст.", "Пустой документ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
@@ -278,14 +303,14 @@ namespace WordClient.TestApp
                 var resp = await api.ProcessDocumentAsync(_txtDocId.Text.Trim(), docText, op);
 
                 var loc = (InsertLocation)_cmbInsertLocation.SelectedIndex;
-                word.InsertResult($"\r\n--- SERVER PROCESSED RESULT ---\r\n{resp.Result}\r\n---------------------------------", loc);
+                word.InsertResult($"\r\n--- РЕЗУЛЬТАТ ОБРАБОТКИ СЕРВЕРОМ ---\r\n{resp.Result}\r\n---------------------------------", loc);
 
-                MessageBox.Show($"Entire document processed ({resp.WordsCount} words, {resp.ParagraphsCount} paragraphs) and inserted at {loc}!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"Весь документ обработан (слов: {resp.WordsCount}, абзацев: {resp.ParagraphsCount}) и вставлен в {FormatLocation(loc)}!", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Send document error", ex);
-                MessageBox.Show($"Error sending document: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка отправки документа: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -304,20 +329,39 @@ namespace WordClient.TestApp
                     TableCount = localReport.TableCount
                 });
 
-                string msg = $"Document Inspection Report:\r\n" +
-                             $"• Word Count: {localReport.WordCount}\r\n" +
-                             $"• Paragraph Count: {localReport.ParagraphCount}\r\n" +
-                             $"• Empty Paragraphs: {localReport.EmptyParagraphCount}\r\n" +
-                             $"• Tables Count: {localReport.TableCount}\r\n" +
-                             $"• Spelling Errors: {localReport.SpellingErrorsCount}\r\n" +
-                             $"• Server Check: {serverCheck.Summary}";
+                string metaLines = string.Empty;
+                foreach (var kvp in localReport.Metadata)
+                {
+                    string label = kvp.Key switch
+                    {
+                        "Title" => "Заголовок",
+                        "Author" => "Автор",
+                        "CreationDate" => "Дата создания",
+                        _ => kvp.Key
+                    };
+                    metaLines += $"• {label}: {kvp.Value}\r\n";
+                }
 
-                MessageBox.Show(msg, "Inspection Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string issuesText = serverCheck.Issues != null && serverCheck.Issues.Count > 0
+                    ? "\r\n• Замечания:\r\n  - " + string.Join("\r\n  - ", serverCheck.Issues)
+                    : "\r\n• Замечаний не обнаружено.";
+
+                string msg = $"Отчёт проверки документа:\r\n" +
+                             $"--- Метаданные ---\r\n{metaLines}" +
+                             $"--- Статистика ---\r\n" +
+                             $"• Слов: {localReport.WordCount}\r\n" +
+                             $"• Абзацев: {localReport.ParagraphCount}\r\n" +
+                             $"• Пустых абзацев: {localReport.EmptyParagraphCount}\r\n" +
+                             $"• Таблиц: {localReport.TableCount}\r\n" +
+                             $"• Ошибок орфографии: {localReport.SpellingErrorsCount}\r\n" +
+                             $"• Проверка на сервере: {serverCheck.Summary}{issuesText}";
+
+                MessageBox.Show(msg, "Проверка завершена", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Check document error", ex);
-                MessageBox.Show($"Error checking document: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка проверки документа: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -326,33 +370,77 @@ namespace WordClient.TestApp
             try
             {
                 var word = GetWordService();
-                var doc = word.GetActiveDocument();
+                var extracted = word.ExtractDocumentStructure();
+
+                using var api = new ApiClient(GetCurrentConfig());
+                List<TemplateCategoryDto> categories;
+                try
+                {
+                    categories = await api.GetCategoriesAsync();
+                }
+                catch
+                {
+                    categories = new List<TemplateCategoryDto>();
+                }
+
+                var tplInput = PromptSaveTemplateDialog($"Шаблон: {extracted.Title}", categories);
+                if (tplInput == null) return;
 
                 var tpl = new TemplateDto
                 {
                     Id = $"tpl-{DateTime.UtcNow:yyyyMMdd-HHmmss}",
-                    Name = $"Template from {doc.Name}",
-                    Description = "Captured via Desktop Client",
-                    Content = new DocumentContentDto
-                    {
-                        Paragraphs = new List<ParagraphDto>
-                        {
-                            new ParagraphDto { Style = "Heading1", Text = "Template Heading" },
-                            new ParagraphDto { Style = "Normal", Text = word.GetDocumentText() }
-                        }
-                    },
-                    Settings = new DocumentSettingsDto { Font = "Times New Roman", FontSize = 12 }
+                    Name = tplInput.Value.Name,
+                    Description = tplInput.Value.Description,
+                    CategoryId = tplInput.Value.CategoryId,
+                    Content = extracted.Content,
+                    Settings = extracted.Settings,
+                    Metadata = extracted.Metadata
                 };
 
-                using var api = new ApiClient(GetCurrentConfig());
                 var saved = await api.SaveTemplateAsync(tpl);
 
-                MessageBox.Show($"Template '{saved.Name}' (ID: {saved.Id}) saved successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(
+                    $"Шаблон «{saved.Name}» (ID: {saved.Id}) успешно сохранён!\r\nАбзацев: {saved.Content.Paragraphs.Count}, таблиц: {saved.Content.Tables.Count}.",
+                    "Готово",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Save template error", ex);
-                MessageBox.Show($"Error saving template: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка сохранения шаблона: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void OnLoadTemplateClick(object? sender, EventArgs e)
+        {
+            try
+            {
+                using var api = new ApiClient(GetCurrentConfig());
+                var templates = await api.GetTemplatesAsync();
+                if (templates.Count == 0)
+                {
+                    MessageBox.Show("На сервере пока нет сохранённых шаблонов.", "Загрузка шаблона", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var selected = PromptSelectTemplateDialog(templates);
+                if (selected == null) return;
+
+                var word = GetWordService();
+                var tplDoc = word.GenerateDocumentFromTemplate(selected);
+                WordDocumentService.ReleaseComObject(tplDoc);
+
+                MessageBox.Show(
+                    $"Шаблон «{selected.Name}» (абзацев: {selected.Content.Paragraphs.Count}, таблиц: {selected.Content.Tables.Count}) загружен в Microsoft Word!",
+                    "Шаблон загружен",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ClientLogger.LogError("Load template error", ex);
+                MessageBox.Show($"Ошибка загрузки шаблона: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -361,13 +449,89 @@ namespace WordClient.TestApp
             try
             {
                 var word = GetWordService();
-                word.CreateNewDocument();
-                MessageBox.Show("New Microsoft Word document created and ready!", "Word Ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var doc = word.CreateNewDocument();
+                WordDocumentService.ReleaseComObject(doc);
+                MessageBox.Show("Создан новый пустой документ Microsoft Word!", "Word готов", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Open word error", ex);
-                MessageBox.Show($"Error opening Word: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка запуска Word: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OnOpenDocxClick(object? sender, EventArgs e)
+        {
+            try
+            {
+                using var openDlg = new OpenFileDialog
+                {
+                    Title = "Открыть существующий документ .docx",
+                    Filter = "Документы Word (*.docx)|*.docx|Все файлы (*.*)|*.*",
+                    CheckFileExists = true
+                };
+                if (openDlg.ShowDialog() != DialogResult.OK) return;
+
+                var word = GetWordService();
+                var opened = word.OpenDocument(openDlg.FileName);
+                WordDocumentService.ReleaseComObject(opened);
+                MessageBox.Show($"Документ «{System.IO.Path.GetFileName(openDlg.FileName)}» открыт в Microsoft Word!", "Документ открыт", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ClientLogger.LogError("Open .docx error", ex);
+                MessageBox.Show($"Ошибка открытия .docx: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OnSaveDocxClick(object? sender, EventArgs e)
+        {
+            try
+            {
+                using var saveDlg = new SaveFileDialog
+                {
+                    Title = "Сохранить активный документ Word как .docx",
+                    Filter = "Документ Word (*.docx)|*.docx",
+                    DefaultExt = "docx",
+                    FileName = $"{_txtDocId.Text.Trim()}.docx"
+                };
+                if (saveDlg.ShowDialog() != DialogResult.OK) return;
+
+                var word = GetWordService();
+                word.SaveActiveDocumentAs(saveDlg.FileName);
+                MessageBox.Show($"Документ сохранён:\r\n{saveDlg.FileName}", "Сохранено", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ClientLogger.LogError("Save .docx error", ex);
+                MessageBox.Show($"Ошибка сохранения .docx: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void OnUploadDocxClick(object? sender, EventArgs e)
+        {
+            try
+            {
+                using var openDlg = new OpenFileDialog
+                {
+                    Title = "Выберите файл .docx для загрузки на сервер (App_Data/uploads)",
+                    Filter = "Документы Word (*.docx)|*.docx",
+                    CheckFileExists = true
+                };
+                if (openDlg.ShowDialog() != DialogResult.OK) return;
+
+                using var api = new ApiClient(GetCurrentConfig());
+                var uploaded = await api.UploadDocumentFileAsync(openDlg.FileName);
+                MessageBox.Show(
+                    $"Файл «{uploaded.FileName}» ({uploaded.SizeBytes} байт) успешно загружен!\r\nПуть на сервере: {uploaded.RelativePath}",
+                    "Загрузка завершена",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ClientLogger.LogError("Upload .docx error", ex);
+                MessageBox.Show($"Ошибка загрузки .docx: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -375,15 +539,133 @@ namespace WordClient.TestApp
         {
             try
             {
+                var input = PromptFindReplaceDialog();
+                if (input == null) return;
+
                 var word = GetWordService();
-                int count = word.FindAndReplace("First paragraph", "PROCESSED PARAGRAPH");
-                MessageBox.Show($"Find and replace executed (replacements made: {count}).", "Find & Replace", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                int count = word.FindAndReplace(input.Value.FindText, input.Value.ReplaceText);
+                MessageBox.Show(
+                    count > 0
+                        ? $"Текст «{input.Value.FindText}» заменён на «{input.Value.ReplaceText}» в активном документе."
+                        : $"Текст «{input.Value.FindText}» не найден в активном документе.",
+                    "Поиск и замена",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 ClientLogger.LogError("Find replace error", ex);
-                MessageBox.Show($"Find & Replace error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Ошибка поиска и замены: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private static (string FindText, string ReplaceText)? PromptFindReplaceDialog()
+        {
+            using var form = new Form
+            {
+                Text = "Поиск и замена в Word",
+                Width = 430,
+                Height = 205,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lblFind = new Label { Left = 14, Top = 14, Width = 388, Text = "Найти текст:" };
+            var txtFind = new TextBox { Left = 14, Top = 36, Width = 388 };
+            var lblRep = new Label { Left = 14, Top = 68, Width = 388, Text = "Заменить на:" };
+            var txtRep = new TextBox { Left = 14, Top = 90, Width = 388 };
+
+            var btnOk = new Button { Text = "Заменить всё", Left = 198, Top = 128, Width = 110, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 316, Top = 128, Width = 86, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[] { lblFind, txtFind, lblRep, txtRep, btnOk, btnCancel });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+
+            if (form.ShowDialog() != DialogResult.OK) return null;
+            if (string.IsNullOrEmpty(txtFind.Text)) return null;
+            return (txtFind.Text, txtRep.Text);
+        }
+
+        private static (string Name, string Description, int? CategoryId)? PromptSaveTemplateDialog(
+            string defaultName,
+            List<TemplateCategoryDto> categories)
+        {
+            using var form = new Form
+            {
+                Text = "Сохранить активный документ как шаблон",
+                Width = 450,
+                Height = 265,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lblName = new Label { Left = 14, Top = 14, Width = 406, Text = "Название шаблона:" };
+            var txtName = new TextBox { Left = 14, Top = 36, Width = 406, Text = defaultName };
+
+            var lblDesc = new Label { Left = 14, Top = 68, Width = 406, Text = "Описание:" };
+            var txtDesc = new TextBox { Left = 14, Top = 90, Width = 406, Text = "Извлечено со стилями и таблицами из Microsoft Word" };
+
+            var lblCat = new Label { Left = 14, Top = 122, Width = 406, Text = "Категория:" };
+            var cmbCat = new ComboBox { Left = 14, Top = 144, Width = 406, DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbCat.Items.Add("(Без категории)");
+            foreach (var c in categories)
+            {
+                cmbCat.Items.Add($"{c.Id}: {c.Name}");
+            }
+            cmbCat.SelectedIndex = categories.Count > 0 ? 1 : 0;
+
+            var btnOk = new Button { Text = "Сохранить", Left = 226, Top = 184, Width = 96, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 330, Top = 184, Width = 90, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[] { lblName, txtName, lblDesc, txtDesc, lblCat, cmbCat, btnOk, btnCancel });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+
+            if (form.ShowDialog() != DialogResult.OK) return null;
+            if (string.IsNullOrWhiteSpace(txtName.Text)) return null;
+
+            int? categoryId = cmbCat.SelectedIndex > 0 && cmbCat.SelectedIndex - 1 < categories.Count
+                ? categories[cmbCat.SelectedIndex - 1].Id
+                : null;
+
+            return (txtName.Text.Trim(), txtDesc.Text.Trim(), categoryId);
+        }
+
+        private static TemplateDto? PromptSelectTemplateDialog(List<TemplateDto> templates)
+        {
+            using var form = new Form
+            {
+                Text = "Загрузка шаблона с сервера",
+                Width = 470,
+                Height = 185,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lbl = new Label { Left = 14, Top = 14, Width = 426, Text = "Выберите шаблон для генерации в Microsoft Word:" };
+            var cmb = new ComboBox { Left = 14, Top = 40, Width = 426, DropDownStyle = ComboBoxStyle.DropDownList };
+            foreach (var t in templates)
+            {
+                cmb.Items.Add($"{t.Id} — {t.Name}");
+            }
+            cmb.SelectedIndex = 0;
+
+            var btnOk = new Button { Text = "Загрузить", Left = 248, Top = 94, Width = 96, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 352, Top = 94, Width = 88, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[] { lbl, cmb, btnOk, btnCancel });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+
+            if (form.ShowDialog() != DialogResult.OK || cmb.SelectedIndex < 0) return null;
+            return templates[cmb.SelectedIndex];
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -23,7 +26,7 @@ namespace WordClient.Core.Services
 
         public ApiClient(ClientConfig? config = null, HttpClient? httpClient = null)
         {
-            _config = config ?? ClientConfig.LoadFromConfiguration();
+            _config = config ?? ClientConfig.LoadFromConfiguration(Assembly.GetCallingAssembly());
             _httpClient = httpClient ?? new HttpClient();
 
             _httpClient.BaseAddress = new Uri(_config.ServerUrl.TrimEnd('/') + "/");
@@ -33,6 +36,12 @@ namespace WordClient.Core.Services
         public ClientConfig Config => _config;
 
         public async Task<bool> ValidateAuthAsync()
+        {
+            var response = await ValidateAuthDetailedAsync();
+            return response?.Valid ?? false;
+        }
+
+        public async Task<AuthValidateResponse?> ValidateAuthDetailedAsync()
         {
             ClientLogger.LogInfo($"Validating API key against {_httpClient.BaseAddress}api/auth/validate...");
 
@@ -49,11 +58,71 @@ namespace WordClient.Core.Services
                 var content = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<AuthValidateResponse>(content, JsonOptions);
                 ClientLogger.LogInfo($"Authentication successful: {result?.Message}");
-                return result?.Valid ?? false;
+                return result;
             }
 
             ClientLogger.LogWarning($"Authentication failed with HTTP {(int)response.StatusCode}: {response.ReasonPhrase}");
-            return false;
+            return new AuthValidateResponse
+            {
+                Valid = false,
+                Message = $"Authentication failed (HTTP {(int)response.StatusCode})."
+            };
+        }
+
+        public async Task<List<DocumentSummaryDto>> GetDocumentsAsync()
+        {
+            ClientLogger.LogInfo("Fetching documents list from server...");
+
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/documents");
+            AddApiKeyHeader(request);
+
+            var response = await SendWithRetryAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException($"Failed to list documents (HTTP {(int)response.StatusCode}): {err}");
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<List<DocumentSummaryDto>>(content, JsonOptions) ?? new List<DocumentSummaryDto>();
+        }
+
+        public async Task<List<TemplateCategoryDto>> GetCategoriesAsync()
+        {
+            ClientLogger.LogInfo("Fetching template categories from server...");
+
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/management/categories");
+            AddApiKeyHeader(request);
+
+            var response = await SendWithRetryAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException($"Failed to fetch categories (HTTP {(int)response.StatusCode}): {err}");
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<List<TemplateCategoryDto>>(content, JsonOptions) ?? new List<TemplateCategoryDto>();
+        }
+
+        public async Task<List<string>> GetSupportedOperationsAsync()
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/text/operations");
+            AddApiKeyHeader(request);
+
+            var response = await SendWithRetryAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new List<string>
+                {
+                    "uppercase", "lowercase", "trim", "reverse", "word_count",
+                    "title_case", "capitalize", "normalize", "anonymize",
+                    "extract_entities", "summarize", "stats"
+                };
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<List<string>>(content, JsonOptions) ?? new List<string>();
         }
 
         public async Task<DocumentDto> GetDocumentAsync(string id)
@@ -84,7 +153,7 @@ namespace WordClient.Core.Services
             return doc;
         }
 
-        public async Task<string> ProcessSelectedTextAsync(string text, string operation = "uppercase")
+        public async Task<string> ProcessSelectedTextAsync(string text, string operation = "uppercase", string? documentId = null)
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
@@ -93,6 +162,7 @@ namespace WordClient.Core.Services
 
             var requestPayload = new TextProcessRequest
             {
+                DocumentId = documentId,
                 Text = text,
                 Operation = operation
             };
@@ -149,6 +219,56 @@ namespace WordClient.Core.Services
             var content = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<DocumentProcessResponse>(content, JsonOptions)
                    ?? new DocumentProcessResponse();
+        }
+
+        public async Task<DocumentUploadResponse> UploadDocumentFileAsync(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                throw new FileNotFoundException($"File not found for upload: {filePath}", filePath);
+
+            var fileInfo = new FileInfo(filePath);
+            if (!string.Equals(fileInfo.Extension, ".docx", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only .docx files can be uploaded to the server.");
+            }
+
+            if (fileInfo.Length > _config.MaxFileSizeBytes)
+            {
+                throw new InvalidOperationException(
+                    $"File '{fileInfo.Name}' ({fileInfo.Length / 1024.0 / 1024.0:F2} MB) exceeds maximum allowed limit of {_config.MaxFileSizeBytes / 1024.0 / 1024.0:F0} MB.");
+            }
+
+            ClientLogger.LogInfo($"Uploading .docx file '{fileInfo.Name}' ({fileInfo.Length / 1024.0:F1} KB) to server...");
+
+            byte[] fileBytes;
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var ms = new MemoryStream())
+            {
+                await fs.CopyToAsync(ms);
+                fileBytes = ms.ToArray();
+            }
+
+            var multipart = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(fileBytes);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            multipart.Add(fileContent, "file", fileInfo.Name);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "api/documents/upload")
+            {
+                Content = multipart
+            };
+            AddApiKeyHeader(request);
+
+            var response = await SendWithRetryAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException($"Document upload failed (HTTP {(int)response.StatusCode}): {err}");
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<DocumentUploadResponse>(content, JsonOptions)
+                   ?? new DocumentUploadResponse();
         }
 
         public async Task<DocumentCheckResult> CheckDocumentAsync(DocumentCheckRequest checkRequest)
@@ -266,6 +386,7 @@ namespace WordClient.Core.Services
         {
             int maxAttempts = Math.Max(1, _config.MaxRetries);
             Exception? lastException = null;
+            int? lastStatusCode = null;
 
             // Clone request content if any, so we can re-send in retry
             byte[]? contentBytes = null;
@@ -311,7 +432,9 @@ namespace WordClient.Core.Services
                         return response;
                     }
 
-                    ClientLogger.LogWarning($"Server returned {(int)response.StatusCode}. Attempt {attempt}/{maxAttempts} failed.");
+                    lastStatusCode = (int)response.StatusCode;
+                    ClientLogger.LogWarning($"Server returned {lastStatusCode}. Attempt {attempt}/{maxAttempts} failed.");
+                    response.Dispose();
                 }
                 catch (HttpRequestException ex)
                 {
@@ -332,9 +455,12 @@ namespace WordClient.Core.Services
                 }
             }
 
+            string reason = lastException != null
+                ? $"Error: {lastException.Message}"
+                : (lastStatusCode.HasValue ? $"Last HTTP status: {lastStatusCode.Value}." : "Please check your network and server status.");
+
             throw new InvalidOperationException(
-                $"Server is unavailable or unresponsive after {maxAttempts} attempts. " +
-                (lastException != null ? $"Error: {lastException.Message}" : "Please check your network and server status."),
+                $"Server is unavailable or unresponsive after {maxAttempts} attempts. {reason}",
                 lastException);
         }
 

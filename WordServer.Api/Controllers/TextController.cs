@@ -1,8 +1,10 @@
 using System;
-using System.Globalization;
-using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using WordClient.Core.Models;
+using WordServer.Api.Data;
+using WordServer.Api.Data.Entities;
+using WordServer.Api.Services;
 
 namespace WordServer.Api.Controllers
 {
@@ -10,8 +12,23 @@ namespace WordServer.Api.Controllers
     [Route("api/[controller]")]
     public class TextController : ControllerBase
     {
+        private readonly AppDbContext _db;
+        private readonly TextProcessingService _textService;
+
+        public TextController(AppDbContext db, TextProcessingService textService)
+        {
+            _db = db;
+            _textService = textService;
+        }
+
+        [HttpGet("operations")]
+        public IActionResult GetSupportedOperations()
+        {
+            return Ok(TextProcessingService.SupportedOperations);
+        }
+
         [HttpPost("process")]
-        public IActionResult ProcessText([FromBody] TextProcessRequest request)
+        public async Task<IActionResult> ProcessText([FromBody] TextProcessRequest request)
         {
             if (request == null || request.Text == null)
             {
@@ -19,58 +36,27 @@ namespace WordServer.Api.Controllers
             }
 
             var operation = request.Operation?.Trim().ToLowerInvariant() ?? "uppercase";
-            string result;
-
-            switch (operation)
+            if (!_textService.TryProcess(request.Text, operation, out var result, out var error))
             {
-                case "uppercase":
-                    result = request.Text.ToUpperInvariant();
-                    break;
-
-                case "lowercase":
-                    result = request.Text.ToLowerInvariant();
-                    break;
-
-                case "trim":
-                    result = request.Text.Trim();
-                    break;
-
-                case "reverse":
-                    var chars = request.Text.ToCharArray();
-                    Array.Reverse(chars);
-                    result = new string(chars);
-                    break;
-
-                case "word_count":
-                    var words = request.Text.Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    result = $"Word count: {words.Length}";
-                    break;
-
-                case "title_case":
-                    result = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(request.Text.ToLowerInvariant());
-                    break;
-
-                case "capitalize":
-                    if (request.Text.Length > 0)
-                    {
-                        result = char.ToUpperInvariant(request.Text[0]) + request.Text.Substring(1);
-                    }
-                    else
-                    {
-                        result = string.Empty;
-                    }
-                    break;
-
-                default:
-                    return BadRequest(new ErrorResponse
-                    {
-                        Error = $"Unsupported operation '{request.Operation}'. Supported operations: uppercase, lowercase, trim, reverse, word_count, title_case, capitalize."
-                    });
+                return BadRequest(new ErrorResponse { Error = error });
             }
+
+            var historyEntry = new ProcessingHistoryEntity
+            {
+                DocumentId = string.IsNullOrWhiteSpace(request.DocumentId) ? "selected-text" : request.DocumentId.Trim(),
+                Operation = operation,
+                InputLength = request.Text.Length,
+                ResultLength = result.Length,
+                ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Timestamp = DateTime.UtcNow
+            };
+
+            _db.ProcessingHistory.Add(historyEntry);
+            await _db.SaveChangesAsync();
 
             return Ok(new TextProcessResponse
             {
-                Id = 0,
+                Id = historyEntry.Id,
                 Result = result
             });
         }
