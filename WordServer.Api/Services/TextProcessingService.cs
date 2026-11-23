@@ -1,30 +1,28 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using WordClient.Core.Models;
+using WordClient.Core.Operations;
 
 namespace WordServer.Api.Services
 {
     public class TextProcessingService
     {
-        public static readonly string[] SupportedOperations =
-        {
-            "uppercase",
-            "lowercase",
-            "trim",
-            "reverse",
-            "word_count",
-            "title_case",
-            "capitalize",
-            "normalize",
-            "anonymize",
-            "extract_entities",
-            "summarize",
-            "stats"
-        };
+
+        //public static readonly string[] SupportedOperations =
+        //{
+        //    "uppercase",
+        //    "lowercase",
+        //    "trim",
+        //    "reverse",
+        //    "word_count",
+        //    "title_case",
+        //    "capitalize",
+        //    "normalize",
+        //    "anonymize",
+        //    "extract_entities",
+        //    "summarize",
+        //    "stats"
+        //};
 
         private static readonly Regex EmailRegex = new(
             @"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
@@ -70,71 +68,80 @@ namespace WordServer.Api.Services
             "наконец", "два", "об", "другой", "хоть", "после", "над", "больше", "тот", "через", "эти", "нас", "про", "всего", "них", "какая", "много"
         };
 
-        public bool TryProcess(string text, string? rawOperation, out string result, out string error)
+        public static IOperation GetOperation(TextProcessRequest request) => GetOperationObject(request.Operation);
+        public static IOperation GetOperation(DocumentProcessRequest request) => GetOperationObject(request.Operation);
+
+        private static IOperation GetOperationObject(string operation)
         {
-            var operation = rawOperation?.Trim().ToLowerInvariant() ?? "uppercase";
+            return TextOperations.SupportedOperations.FirstOrDefault(d => d.Name().Equals(operation)) ?? new UppercaseOperation();
+        }
+
+        public bool TryProcess(string text, IOperation rawOperation, out string result, out string error)
+        {
             error = string.Empty;
+            result = rawOperation.Process(text);
+            return true;
 
-            switch (operation)
-            {
-                case "uppercase":
-                    result = text.ToUpperInvariant();
-                    return true;
+            //switch (operation)
+            //{
+            //    case "uppercase":
+            //        result = text.ToUpperInvariant();
+            //        return true;
 
-                case "lowercase":
-                    result = text.ToLowerInvariant();
-                    return true;
+            //    case "lowercase":
+            //        result = text.ToLowerInvariant();
+            //        return true;
 
-                case "trim":
-                    result = text.Trim();
-                    return true;
+            //    case "trim":
+            //        result = text.Trim();
+            //        return true;
 
-                case "reverse":
-                    var chars = text.ToCharArray();
-                    Array.Reverse(chars);
-                    result = new string(chars);
-                    return true;
+            //    case "reverse":
+            //        var chars = text.ToCharArray();
+            //        Array.Reverse(chars);
+            //        result = new string(chars);
+            //        return true;
 
-                case "word_count":
-                    var words = SplitWords(text);
-                    result = $"Word count: {words.Length}";
-                    return true;
+            //    case "word_count":
+            //        var words = SplitWords(text);
+            //        result = $"Word count: {words.Length}";
+            //        return true;
 
-                case "title_case":
-                    result = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
-                    return true;
+            //    case "title_case":
+            //        result = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text.ToLowerInvariant());
+            //        return true;
 
-                case "capitalize":
-                    result = text.Length > 0
-                        ? char.ToUpperInvariant(text[0]) + text.Substring(1)
-                        : string.Empty;
-                    return true;
+            //    case "capitalize":
+            //        result = text.Length > 0
+            //            ? char.ToUpperInvariant(text[0]) + text.Substring(1)
+            //            : string.Empty;
+            //        return true;
 
-                case "normalize":
-                    result = NormalizeText(text);
-                    return true;
+            //    case "normalize":
+            //        result = NormalizeText(text);
+            //        return true;
 
-                case "anonymize":
-                    result = AnonymizePii(text);
-                    return true;
+            //    case "anonymize":
+            //        result = AnonymizePii(text);
+            //        return true;
 
-                case "extract_entities":
-                    result = ExtractEntities(text);
-                    return true;
+            //    case "extract_entities":
+            //        result = ExtractEntities(text);
+            //        return true;
 
-                case "summarize":
-                    result = SummarizeText(text);
-                    return true;
+            //    case "summarize":
+            //        result = SummarizeText(text);
+            //        return true;
 
-                case "stats":
-                    result = ComputeDetailedStats(text);
-                    return true;
+            //    case "stats":
+            //        result = ComputeDetailedStats(text);
+            //        return true;
 
-                default:
-                    result = string.Empty;
-                    error = $"Unsupported operation '{rawOperation}'. Supported operations: {string.Join(", ", SupportedOperations)}.";
-                    return false;
-            }
+            //    default:
+            //        result = string.Empty;
+            //        error = $"Unsupported operation '{rawOperation}'. Supported operations: {string.Join(", ", SupportedOperations)}.";
+            //        return false;
+            //}
         }
 
         public DocumentCheckResult InspectDocument(DocumentCheckRequest request)

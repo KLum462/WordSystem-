@@ -1,7 +1,6 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using WordClient.Core.Models;
+using WordClient.Core.Operations;
 using WordServer.Api.Data;
 using WordServer.Api.Data.Entities;
 using WordServer.Api.Services;
@@ -24,7 +23,7 @@ namespace WordServer.Api.Controllers
         [HttpGet("operations")]
         public IActionResult GetSupportedOperations()
         {
-            return Ok(TextProcessingService.SupportedOperations);
+            return Ok(TextOperations.OperationsNames());
         }
 
         [HttpPost("process")]
@@ -35,16 +34,12 @@ namespace WordServer.Api.Controllers
                 return BadRequest(new ErrorResponse { Error = "Text cannot be null." });
             }
 
-            var operation = request.Operation?.Trim().ToLowerInvariant() ?? "uppercase";
-            if (!_textService.TryProcess(request.Text, operation, out var result, out var error))
-            {
-                return BadRequest(new ErrorResponse { Error = error });
-            }
-
+            var op = TextProcessingService.GetOperation(request);
+            var result = op.Process(request.Text);
             var historyEntry = new ProcessingHistoryEntity
             {
                 DocumentId = string.IsNullOrWhiteSpace(request.DocumentId) ? "selected-text" : request.DocumentId.Trim(),
-                Operation = operation,
+                Operation = op.Name(),
                 InputLength = request.Text.Length,
                 ResultLength = result.Length,
                 ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
