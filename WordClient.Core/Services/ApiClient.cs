@@ -1,15 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using WordClient.Core.Configuration;
 using WordClient.Core.Models;
+using WordClient.Core.Operations;
 
 namespace WordClient.Core.Services
 {
@@ -209,12 +205,7 @@ namespace WordClient.Core.Services
             var response = await SendWithRetryAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                return new List<string>
-                {
-                    "uppercase", "lowercase", "trim", "reverse", "word_count",
-                    "title_case", "capitalize", "normalize", "anonymize",
-                    "extract_entities", "summarize", "stats"
-                };
+                return TextOperations.OperationsNames().ToList();
             }
 
             var content = await response.Content.ReadAsStringAsync();

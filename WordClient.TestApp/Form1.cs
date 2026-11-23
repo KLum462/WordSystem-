@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using WordClient.Core.Configuration;
 using WordClient.Core.Models;
+using WordClient.Core.Operations;
 using WordClient.Core.Services;
 
 namespace WordClient.TestApp
@@ -71,11 +72,7 @@ namespace WordClient.TestApp
             _txtDocId = new TextBox { Text = "doc-001", Dock = DockStyle.Fill };
 
             _cmbOperation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-            _cmbOperation.Items.AddRange(new object[]
-            {
-                "uppercase", "lowercase", "reverse", "trim", "word_count", "title_case", "capitalize",
-                "normalize", "anonymize", "extract_entities", "summarize", "stats"
-            });
+            _cmbOperation.Items.AddRange(TextOperations.OperationsNames().ToArray());
             _cmbOperation.SelectedIndex = 0;
 
             configLayout.Controls.Add(new Label { Text = "Адрес сервера:", Anchor = AnchorStyles.Left }, 0, 0);

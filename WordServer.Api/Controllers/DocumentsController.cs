@@ -1,16 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using System.Text;
+using System.Text.Json;
 using WordClient.Core.Models;
 using WordServer.Api.Data;
 using WordServer.Api.Data.Entities;
@@ -144,17 +135,14 @@ namespace WordServer.Api.Controllers
                 });
             }
 
-            var operation = request.Operation?.Trim().ToLowerInvariant() ?? "uppercase";
-            if (!_textService.TryProcess(request.Text, operation, out var processedText, out var error))
-            {
-                return BadRequest(new ErrorResponse { Error = error });
-            }
+            var op = TextProcessingService.GetOperation(request);
+            var processedText = op.Process(request.Text);
 
             var docId = string.IsNullOrWhiteSpace(request.Id) ? "doc-proc" : request.Id.Trim();
             _db.ProcessingHistory.Add(new ProcessingHistoryEntity
             {
                 DocumentId = docId,
-                Operation = operation,
+                Operation = op.Name(),
                 InputLength = request.Text.Length,
                 ResultLength = processedText.Length,
                 ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -471,7 +459,7 @@ namespace WordServer.Api.Controllers
                 Id = entity.Id,
                 Title = entity.Title,
                 Metadata = updatedMeta,
-                Content = JsonSerializer.Deserialize<DocumentContentDto>(entity.ContentJson, JsonOptions) ?? new DocumentContentDto(), 
+                Content = JsonSerializer.Deserialize<DocumentContentDto>(entity.ContentJson, JsonOptions) ?? new DocumentContentDto(),
                 Settings = JsonSerializer.Deserialize<DocumentSettingsDto>(entity.SettingsJson, JsonOptions) ?? new DocumentSettingsDto()
             };
 
