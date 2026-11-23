@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using WordClient.Core.Models;
 using WordServer.Api.Data.Entities;
+using WordServer.Api.Services;
 
 namespace WordServer.Api.Data
 {
@@ -23,6 +24,7 @@ namespace WordServer.Api.Data
             if (context.Database.IsRelational())
             {
                 await context.Database.EnsureCreatedAsync();
+                await EnsurePasswordHashColumnExistsAsync(context);
             }
 
             // Seed sample document doc-001 if not present
@@ -191,6 +193,7 @@ namespace WordServer.Api.Data
                         FullName = "Lead Architect",
                         Email = "admin@company.local",
                         ApiKey = "secret-internship-api-key-2026",
+                        PasswordHash = PasswordHasher.HashPassword("admin123"),
                         Role = "Admin",
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
@@ -201,11 +204,29 @@ namespace WordServer.Api.Data
                         FullName = "Ivan Developer",
                         Email = "ivan@internship.local",
                         ApiKey = "internship-key-demo",
+                        PasswordHash = PasswordHasher.HashPassword("ivan123"),
                         Role = "Intern",
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
                     }
                 );
+            }
+            else
+            {
+                // Backfill password hashes for existing databases upgraded from older schema
+                var usersWithoutPassword = await context.Users
+                    .Where(u => string.IsNullOrEmpty(u.PasswordHash))
+                    .ToListAsync();
+
+                foreach (var u in usersWithoutPassword)
+                {
+                    u.PasswordHash = u.Username switch
+                    {
+                        "admin" => PasswordHasher.HashPassword("admin123"),
+                        "ivan_intern" => PasswordHasher.HashPassword("ivan123"),
+                        _ => PasswordHasher.HashPassword("123456")
+                    };
+                }
             }
 
             // Template Categories already seeded above before Templates
@@ -253,6 +274,56 @@ namespace WordServer.Api.Data
             }
 
             await context.SaveChangesAsync();
+        }
+
+        private static async Task EnsurePasswordHashColumnExistsAsync(AppDbContext context)
+        {
+            var provider = context.Database.ProviderName ?? string.Empty;
+            try
+            {
+                if (provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+                {
+                    var conn = context.Database.GetDbConnection();
+                    if (conn.State != System.Data.ConnectionState.Open)
+                        await conn.OpenAsync();
+
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "PRAGMA table_info('Users');";
+                    bool hasColumn = false;
+                    using (var reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            if (string.Equals(reader["name"]?.ToString(), "PasswordHash", StringComparison.OrdinalIgnoreCase))
+                            {
+                                hasColumn = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!hasColumn)
+                    {
+                        using var alter = conn.CreateCommand();
+                        alter.CommandText = "ALTER TABLE \"Users\" ADD COLUMN \"PasswordHash\" TEXT NOT NULL DEFAULT '';";
+                        await alter.ExecuteNonQueryAsync();
+                    }
+                }
+                else if (provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase))
+                {
+                    await context.Database.ExecuteSqlRawAsync(
+                        "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"PasswordHash\" character varying(500) NOT NULL DEFAULT '';");
+                }
+                else if (provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+                {
+                    await context.Database.ExecuteSqlRawAsync(
+                        "IF COL_LENGTH('Users', 'PasswordHash') IS NULL ALTER TABLE [Users] ADD [PasswordHash] nvarchar(500) NOT NULL DEFAULT N'';");
+                }
+            }
+            catch
+            {
+                // Ignore if already exists or non-applicable
+            }
         }
     }
 }

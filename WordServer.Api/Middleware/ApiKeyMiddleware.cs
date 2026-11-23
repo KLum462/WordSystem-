@@ -31,6 +31,8 @@ namespace WordServer.Api.Middleware
 
             // Allow public paths without API key
             if (path.StartsWith("/api/health") ||
+                path.Equals("/api/auth/login") ||
+                path.Equals("/api/auth/change-password") ||
                 path.StartsWith("/swagger") ||
                 path.Equals("/") ||
                 path.StartsWith("/favicon.ico"))

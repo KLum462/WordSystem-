@@ -4,10 +4,12 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using WordClient.Core.Models;
 using WordServer.Api.Data;
 using WordServer.Api.Data.Entities;
 using WordServer.Api.Middleware;
+using WordServer.Api.Services;
 
 namespace WordServer.Api.Controllers
 {
@@ -17,11 +19,96 @@ namespace WordServer.Api.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(AppDbContext db, IConfiguration configuration)
+        public AuthController(AppDbContext db, IConfiguration configuration, ILogger<AuthController> logger)
         {
             _db = db;
             _configuration = configuration;
+            _logger = logger;
+        }
+
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest? request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrEmpty(request.Password))
+            {
+                return BadRequest(new AuthValidateResponse
+                {
+                    Valid = false,
+                    Message = "Необходимо указать логин и пароль."
+                });
+            }
+
+            var username = request.Username.Trim();
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+
+            if (user == null || !PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
+            {
+                _logger.LogWarning("Failed login attempt for username '{Username}'.", username);
+                return Unauthorized(new AuthValidateResponse
+                {
+                    Valid = false,
+                    Message = "Неверный логин или пароль."
+                });
+            }
+
+            if (!user.IsActive)
+            {
+                _logger.LogWarning("Deactivated user '{Username}' attempted login.", username);
+                return Unauthorized(new AuthValidateResponse
+                {
+                    Valid = false,
+                    Message = "Учётная запись отключена администратором."
+                });
+            }
+
+            _logger.LogInformation("User '{Username}' ({Role}) logged in via username/password.", user.Username, user.Role);
+            return Ok(new AuthValidateResponse
+            {
+                Valid = true,
+                Message = $"Вход выполнен: {user.FullName} ({user.Role}).",
+                User = user.Username,
+                FullName = user.FullName,
+                Role = user.Role,
+                ApiKey = user.ApiKey
+            });
+        }
+
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest? request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.Username) ||
+                string.IsNullOrEmpty(request.CurrentPassword) ||
+                string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                return BadRequest(new ErrorResponse { Error = "Необходимо указать логин, текущий пароль и новый пароль." });
+            }
+
+            if (request.NewPassword.Length < 4)
+            {
+                return BadRequest(new ErrorResponse { Error = "Новый пароль должен содержать не менее 4 символов." });
+            }
+
+            var username = request.Username.Trim();
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null || !PasswordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Failed password change attempt for username '{Username}'.", username);
+                return Unauthorized(new ErrorResponse { Error = "Неверный логин или текущий пароль." });
+            }
+
+            if (!user.IsActive)
+            {
+                return Unauthorized(new ErrorResponse { Error = "Учётная запись отключена администратором." });
+            }
+
+            user.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Password changed successfully for user '{Username}'.", username);
+            return Ok(new { message = $"Пароль для пользователя '{user.Username}' успешно изменён." });
         }
 
         [HttpPost("validate")]

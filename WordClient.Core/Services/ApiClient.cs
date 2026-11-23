@@ -69,6 +69,102 @@ namespace WordClient.Core.Services
             };
         }
 
+        public async Task<AuthValidateResponse> LoginAsync(string username, string password, Assembly? callerAssembly = null)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+                throw new ArgumentException("Логин и пароль не могут быть пустыми.");
+
+            ClientLogger.LogInfo($"Logging in user '{username}' against {_httpClient.BaseAddress}api/auth/login...");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "api/auth/login")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new LoginRequest { Username = username.Trim(), Password = password }, JsonOptions),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+
+            var response = await SendWithRetryAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = JsonSerializer.Deserialize<AuthValidateResponse>(content, JsonOptions) ?? new AuthValidateResponse();
+                if (result.Valid && !string.IsNullOrWhiteSpace(result.ApiKey))
+                {
+                    _config.ApiKey = result.ApiKey!;
+                    ClientConfig.SessionUsername = result.User ?? username.Trim();
+                    ClientConfig.TryUpdateApiKeyInConfiguration(result.ApiKey!, callerAssembly ?? Assembly.GetCallingAssembly());
+                }
+                ClientLogger.LogInfo($"Login successful for '{result.User}' ({result.Role}).");
+                return result;
+            }
+
+            try
+            {
+                var errObj = JsonSerializer.Deserialize<AuthValidateResponse>(content, JsonOptions);
+                if (errObj != null && !string.IsNullOrWhiteSpace(errObj.Message))
+                {
+                    return new AuthValidateResponse { Valid = false, Message = errObj.Message };
+                }
+            }
+            catch { }
+
+            return new AuthValidateResponse
+            {
+                Valid = false,
+                Message = $"Ошибка входа (HTTP {(int)response.StatusCode})."
+            };
+        }
+
+        public async Task<string> ChangePasswordAsync(string username, string currentPassword, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(currentPassword) || string.IsNullOrWhiteSpace(newPassword))
+                throw new ArgumentException("Укажите логин, текущий пароль и новый пароль.");
+
+            ClientLogger.LogInfo($"Changing password for user '{username}'...");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "api/auth/change-password");
+            AddApiKeyHeader(request);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(new ChangePasswordRequest
+                {
+                    Username = username.Trim(),
+                    CurrentPassword = currentPassword,
+                    NewPassword = newPassword
+                }, JsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await SendWithRetryAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var err = JsonSerializer.Deserialize<ErrorResponse>(content, JsonOptions);
+                    if (!string.IsNullOrWhiteSpace(err?.Error))
+                        throw new InvalidOperationException(err!.Error);
+                }
+                catch (JsonException) { }
+
+                throw new InvalidOperationException($"Не удалось сменить пароль (HTTP {(int)response.StatusCode}): {content}");
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("message", out var msgProp))
+                {
+                    return msgProp.GetString() ?? "Пароль успешно изменён.";
+                }
+            }
+            catch { }
+
+            return "Пароль успешно изменён.";
+        }
+
         public async Task<List<DocumentSummaryDto>> GetDocumentsAsync()
         {
             ClientLogger.LogInfo("Fetching documents list from server...");

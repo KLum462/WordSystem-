@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
+using WordClient.Core.Configuration;
 using WordClient.Core.Models;
 using WordClient.Core.Services;
 using Office = Microsoft.Office.Core;
@@ -49,14 +50,52 @@ namespace WordVstoAddIn
         {
             try
             {
-                using var api = new ApiClient();
-                var auth = await api.ValidateAuthDetailedAsync();
+                var currentCfg = ClientConfig.LoadFromConfiguration(Assembly.GetExecutingAssembly());
+                string defaultUser = ClientConfig.SessionUsername ?? "admin";
+
+                var dialogResult = RibbonDialogs.PromptAuthDialog(
+                    currentCfg.ServerUrl,
+                    defaultUser,
+                    currentCfg.ApiKey,
+                    cp =>
+                    {
+                        try
+                        {
+                            using var cpApi = new ApiClient(currentCfg);
+                            return cpApi.ChangePasswordAsync(cp.Username, cp.CurrentPassword, cp.NewPassword)
+                                .GetAwaiter()
+                                .GetResult();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Ошибка смены пароля: {ex.Message}", "Смена пароля", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return null;
+                        }
+                    });
+
+                if (dialogResult == null) return;
+
+                AuthValidateResponse? auth;
+                if (dialogResult.UseCredentials)
+                {
+                    using var api = new ApiClient(currentCfg);
+                    auth = await api.LoginAsync(dialogResult.Username, dialogResult.Password, Assembly.GetExecutingAssembly());
+                }
+                else
+                {
+                    currentCfg.ApiKey = dialogResult.ApiKey;
+                    ClientConfig.TryUpdateApiKeyInConfiguration(dialogResult.ApiKey, Assembly.GetExecutingAssembly());
+                    using var api = new ApiClient(currentCfg);
+                    auth = await api.ValidateAuthDetailedAsync();
+                }
+
                 if (auth != null && auth.Valid)
                 {
                     MessageBox.Show(
                         $"Авторизация прошла успешно!\r\n" +
-                        $"Сервер: {api.Config.ServerUrl}\r\n" +
+                        $"Сервер: {currentCfg.ServerUrl}\r\n" +
                         $"Пользователь: {auth.FullName ?? auth.User} ({auth.Role ?? "User"})\r\n" +
+                        $"Логин: {auth.User}\r\n" +
                         $"Лог клиента: {ClientLogger.LogFilePath}",
                         "Авторизация",
                         MessageBoxButtons.OK,
@@ -65,7 +104,7 @@ namespace WordVstoAddIn
                 else
                 {
                     MessageBox.Show(
-                        $"Ошибка авторизации!\r\nСервер: {api.Config.ServerUrl}\r\n{auth?.Message ?? "Проверьте API-ключ в файле App.config."}",
+                        $"Ошибка авторизации!\r\nСервер: {currentCfg.ServerUrl}\r\n{auth?.Message ?? "Неверные учётные данные."}",
                         "Ошибка авторизации",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);

@@ -7,6 +7,9 @@ namespace WordClient.Core.Configuration
 {
     public class ClientConfig
     {
+        public static string? SessionApiKey { get; set; }
+        public static string? SessionUsername { get; set; }
+
         public string ServerUrl { get; set; } = "http://localhost:5000";
         public string ApiKey { get; set; } = "secret-internship-api-key-2026";
         public int TimeoutSeconds { get; set; } = 30;
@@ -22,26 +25,70 @@ namespace WordClient.Core.Configuration
                 // 1. Prefer config file located next to the add-in / calling assembly
                 //    (critical when hosted inside WINWORD.EXE where AppDomain config is WINWORD.EXE.config)
                 var candidatePaths = GetCandidateConfigPaths(sourceAssembly ?? Assembly.GetCallingAssembly());
+                bool loaded = false;
                 foreach (var configPath in candidatePaths)
                 {
                     if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
                     {
                         if (TryApplyFromMappedConfig(config, configPath))
                         {
-                            return config;
+                            loaded = true;
+                            break;
                         }
                     }
                 }
 
                 // 2. Fallback to standard process App.config (e.g., WordClient.TestApp.dll.config)
-                ApplySettings(config, key => ConfigurationManager.AppSettings[key]);
+                if (!loaded)
+                {
+                    ApplySettings(config, key => ConfigurationManager.AppSettings[key]);
+                }
             }
             catch
             {
                 // Fallback to default values if app.config is unavailable or cannot be read
             }
 
+            if (!string.IsNullOrWhiteSpace(SessionApiKey))
+            {
+                config.ApiKey = SessionApiKey!;
+            }
+
             return config;
+        }
+
+        public static bool TryUpdateApiKeyInConfiguration(string apiKey, Assembly? sourceAssembly = null)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) return false;
+
+            SessionApiKey = apiKey.Trim();
+            try
+            {
+                var candidatePaths = GetCandidateConfigPaths(sourceAssembly ?? Assembly.GetCallingAssembly());
+                foreach (var configPath in candidatePaths)
+                {
+                    if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
+                    {
+                        var fileMap = new ExeConfigurationFileMap { ExeConfigFilename = configPath };
+                        var mappedConfig = ConfigurationManager.OpenMappedExeConfiguration(fileMap, ConfigurationUserLevel.None);
+                        if (mappedConfig.AppSettings?.Settings["ApiKey"] != null)
+                        {
+                            mappedConfig.AppSettings.Settings["ApiKey"].Value = SessionApiKey;
+                        }
+                        else
+                        {
+                            mappedConfig.AppSettings?.Settings.Add("ApiKey", SessionApiKey);
+                        }
+                        mappedConfig.Save(ConfigurationSaveMode.Modified);
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                // Keep SessionApiKey in memory if config file is read-only
+            }
+            return false;
         }
 
         public static ClientConfig LoadFromFile(string configFilePath)

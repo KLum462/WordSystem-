@@ -29,8 +29,178 @@ namespace WordVstoAddIn
         public bool UploadDocxFile { get; set; }
     }
 
+    internal sealed class AuthDialogResult
+    {
+        public bool UseCredentials { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+    }
+
     internal static class RibbonDialogs
     {
+        public static AuthDialogResult? PromptAuthDialog(
+            string serverUrl,
+            string defaultUsername,
+            string currentApiKey,
+            Func<(string Username, string CurrentPassword, string NewPassword), string?> onChangePasswordRequested)
+        {
+            using var form = new Form
+            {
+                Text = "Авторизация на сервере",
+                Width = 460,
+                Height = 325,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterScreen,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lblServer = new Label
+            {
+                Left = 16,
+                Top = 12,
+                Width = 412,
+                ForeColor = Color.DimGray,
+                Text = $"Сервер: {serverUrl}"
+            };
+
+            var rbCreds = new RadioButton
+            {
+                Left = 16,
+                Top = 36,
+                Width = 412,
+                Text = "Войти по логину и паролю",
+                Checked = true
+            };
+
+            var lblUser = new Label { Left = 34, Top = 66, Width = 80, Text = "Логин:" };
+            var txtUser = new TextBox { Left = 120, Top = 63, Width = 308, Text = defaultUsername };
+
+            var lblPass = new Label { Left = 34, Top = 96, Width = 80, Text = "Пароль:" };
+            var txtPass = new TextBox { Left = 120, Top = 93, Width = 308, UseSystemPasswordChar = true };
+
+            var lblHint = new Label
+            {
+                Left = 120,
+                Top = 120,
+                Width = 308,
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 8F),
+                Text = "Демо: admin / admin123  или  ivan_intern / ivan123"
+            };
+
+            var rbApiKey = new RadioButton
+            {
+                Left = 16,
+                Top = 148,
+                Width = 412,
+                Text = "Войти по API-ключу (X-API-Key)"
+            };
+
+            var lblKey = new Label { Left = 34, Top = 178, Width = 80, Text = "API-ключ:" };
+            var txtKey = new TextBox { Left = 120, Top = 175, Width = 308, Text = currentApiKey, Enabled = false };
+
+            void SyncMode()
+            {
+                bool useCreds = rbCreds.Checked;
+                txtUser.Enabled = useCreds;
+                txtPass.Enabled = useCreds;
+                txtKey.Enabled = !useCreds;
+            }
+
+            rbCreds.CheckedChanged += (_, _) => SyncMode();
+            rbApiKey.CheckedChanged += (_, _) => SyncMode();
+
+            var btnChangePass = new Button
+            {
+                Text = "Сменить пароль...",
+                Left = 16,
+                Top = 232,
+                Width = 145
+            };
+            btnChangePass.Click += (_, _) =>
+            {
+                var cp = PromptChangePassword(txtUser.Text.Trim());
+                if (cp == null) return;
+                var resultMsg = onChangePasswordRequested(cp.Value);
+                if (!string.IsNullOrWhiteSpace(resultMsg))
+                {
+                    MessageBox.Show(resultMsg, "Смена пароля", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            };
+
+            var btnOk = new Button { Text = "Войти", Left = 248, Top = 232, Width = 86, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 342, Top = 232, Width = 86, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[]
+            {
+                lblServer, rbCreds, lblUser, txtUser, lblPass, txtPass, lblHint,
+                rbApiKey, lblKey, txtKey, btnChangePass, btnOk, btnCancel
+            });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+            form.Shown += (_, _) => txtPass.Focus();
+
+            if (form.ShowDialog() != DialogResult.OK) return null;
+
+            return new AuthDialogResult
+            {
+                UseCredentials = rbCreds.Checked,
+                Username = txtUser.Text.Trim(),
+                Password = txtPass.Text,
+                ApiKey = txtKey.Text.Trim()
+            };
+        }
+
+        public static (string Username, string CurrentPassword, string NewPassword)? PromptChangePassword(string defaultUsername)
+        {
+            using var form = new Form
+            {
+                Text = "Смена пароля пользователя",
+                Width = 420,
+                Height = 235,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterScreen,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lblUser = new Label { Left = 16, Top = 18, Width = 125, Text = "Логин:" };
+            var txtUser = new TextBox { Left = 148, Top = 15, Width = 240, Text = string.IsNullOrWhiteSpace(defaultUsername) ? "admin" : defaultUsername };
+
+            var lblCurr = new Label { Left = 16, Top = 52, Width = 125, Text = "Текущий пароль:" };
+            var txtCurr = new TextBox { Left = 148, Top = 49, Width = 240, UseSystemPasswordChar = true };
+
+            var lblNew = new Label { Left = 16, Top = 86, Width = 125, Text = "Новый пароль:" };
+            var txtNew = new TextBox { Left = 148, Top = 83, Width = 240, UseSystemPasswordChar = true };
+
+            var lblConf = new Label { Left = 16, Top = 120, Width = 125, Text = "Повторите пароль:" };
+            var txtConf = new TextBox { Left = 148, Top = 117, Width = 240, UseSystemPasswordChar = true };
+
+            var btnOk = new Button { Text = "Сохранить", Left = 200, Top = 156, Width = 90, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 298, Top = 156, Width = 90, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[] { lblUser, txtUser, lblCurr, txtCurr, lblNew, txtNew, lblConf, txtConf, btnOk, btnCancel });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+
+            if (form.ShowDialog() != DialogResult.OK) return null;
+
+            if (txtNew.Text != txtConf.Text)
+            {
+                MessageBox.Show("Новый пароль и подтверждение не совпадают.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(txtUser.Text) || string.IsNullOrEmpty(txtCurr.Text) || string.IsNullOrWhiteSpace(txtNew.Text))
+            {
+                MessageBox.Show("Заполните все поля.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return null;
+            }
+
+            return (txtUser.Text.Trim(), txtCurr.Text, txtNew.Text);
+        }
         public static LoadDocumentSelection? PromptLoadDocument(
             List<DocumentSummaryDto> documents,
             List<TemplateDto> templates,

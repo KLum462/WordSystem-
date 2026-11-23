@@ -13,6 +13,8 @@ namespace WordClient.TestApp
     {
         private TextBox _txtServerUrl = null!;
         private TextBox _txtApiKey = null!;
+        private TextBox _txtUsername = null!;
+        private TextBox _txtPassword = null!;
         private TextBox _txtDocId = null!;
         private ComboBox _cmbOperation = null!;
         private ComboBox _cmbInsertLocation = null!;
@@ -39,7 +41,7 @@ namespace WordClient.TestApp
                 RowCount = 3,
                 Padding = new Padding(10)
             };
-            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 130F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 165F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 165F));
             mainPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
@@ -53,17 +55,19 @@ namespace WordClient.TestApp
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 2,
+                RowCount = 3,
                 Padding = new Padding(6)
             };
-            configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
+            configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115F));
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
+            configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115F));
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
 
             var loadedCfg = ClientConfig.LoadFromConfiguration();
             _txtServerUrl = new TextBox { Text = loadedCfg.ServerUrl, Dock = DockStyle.Fill };
             _txtApiKey = new TextBox { Text = loadedCfg.ApiKey, Dock = DockStyle.Fill };
+            _txtUsername = new TextBox { Text = "admin", Dock = DockStyle.Fill };
+            _txtPassword = new TextBox { Text = "admin123", UseSystemPasswordChar = true, Dock = DockStyle.Fill };
             _txtDocId = new TextBox { Text = "doc-001", Dock = DockStyle.Fill };
 
             _cmbOperation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -79,10 +83,15 @@ namespace WordClient.TestApp
             configLayout.Controls.Add(new Label { Text = "API-ключ:", Anchor = AnchorStyles.Left }, 2, 0);
             configLayout.Controls.Add(_txtApiKey, 3, 0);
 
-            configLayout.Controls.Add(new Label { Text = "ID документа:", Anchor = AnchorStyles.Left }, 0, 1);
-            configLayout.Controls.Add(_txtDocId, 1, 1);
-            configLayout.Controls.Add(new Label { Text = "Операция:", Anchor = AnchorStyles.Left }, 2, 1);
-            configLayout.Controls.Add(_cmbOperation, 3, 1);
+            configLayout.Controls.Add(new Label { Text = "Логин:", Anchor = AnchorStyles.Left }, 0, 1);
+            configLayout.Controls.Add(_txtUsername, 1, 1);
+            configLayout.Controls.Add(new Label { Text = "Пароль:", Anchor = AnchorStyles.Left }, 2, 1);
+            configLayout.Controls.Add(_txtPassword, 3, 1);
+
+            configLayout.Controls.Add(new Label { Text = "ID документа:", Anchor = AnchorStyles.Left }, 0, 2);
+            configLayout.Controls.Add(_txtDocId, 1, 2);
+            configLayout.Controls.Add(new Label { Text = "Операция:", Anchor = AnchorStyles.Left }, 2, 2);
+            configLayout.Controls.Add(_cmbOperation, 3, 2);
 
             grpConfig.Controls.Add(configLayout);
 
@@ -100,6 +109,7 @@ namespace WordClient.TestApp
             };
 
             var btnAuth = CreateButton("1. Авторизация", OnAuthenticateClick, Color.LightSteelBlue);
+            var btnChangePass = CreateButton("Сменить пароль", OnChangePasswordClick, Color.Lavender);
             var btnLoadDoc = CreateButton("2. Загрузить документ", OnLoadDocumentClick, Color.LightGreen);
             var btnSendSelected = CreateButton("3. Отправить выделенное", OnSendSelectedTextClick, Color.LightGoldenrodYellow);
             var btnSendDoc = CreateButton("4. Отправить документ", OnSendDocumentClick, Color.Khaki);
@@ -118,6 +128,7 @@ namespace WordClient.TestApp
             _cmbInsertLocation.SelectedIndex = 0;
 
             flowActions.Controls.Add(btnAuth);
+            flowActions.Controls.Add(btnChangePass);
             flowActions.Controls.Add(btnLoadDoc);
             flowActions.Controls.Add(btnSendSelected);
             flowActions.Controls.Add(btnSendDoc);
@@ -218,12 +229,26 @@ namespace WordClient.TestApp
             try
             {
                 using var api = new ApiClient(GetCurrentConfig());
-                var auth = await api.ValidateAuthDetailedAsync();
+                AuthValidateResponse? auth;
+
+                if (!string.IsNullOrWhiteSpace(_txtUsername.Text) && !string.IsNullOrEmpty(_txtPassword.Text))
+                {
+                    auth = await api.LoginAsync(_txtUsername.Text.Trim(), _txtPassword.Text);
+                    if (auth.Valid && !string.IsNullOrWhiteSpace(auth.ApiKey))
+                    {
+                        _txtApiKey.Text = auth.ApiKey;
+                    }
+                }
+                else
+                {
+                    auth = await api.ValidateAuthDetailedAsync();
+                }
+
                 bool ok = auth?.Valid ?? false;
                 MessageBox.Show(
                     ok
                         ? $"Авторизация прошла успешно!\r\nПользователь: {auth!.FullName ?? auth.User} ({auth.Role ?? "User"})"
-                        : $"Ошибка авторизации! {auth?.Message ?? "Неверный API-ключ."}",
+                        : $"Ошибка авторизации! {auth?.Message ?? "Неверные учётные данные."}",
                     "Авторизация",
                     MessageBoxButtons.OK,
                     ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -233,6 +258,69 @@ namespace WordClient.TestApp
                 ClientLogger.LogError("Auth error", ex);
                 MessageBox.Show($"Ошибка авторизации: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private async void OnChangePasswordClick(object? sender, EventArgs e)
+        {
+            try
+            {
+                var input = PromptChangePasswordDialog(_txtUsername.Text.Trim());
+                if (input == null) return;
+
+                using var api = new ApiClient(GetCurrentConfig());
+                var msg = await api.ChangePasswordAsync(input.Value.Username, input.Value.CurrentPassword, input.Value.NewPassword);
+                _txtPassword.Text = input.Value.NewPassword;
+                MessageBox.Show(msg, "Смена пароля", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ClientLogger.LogError("Change password error", ex);
+                MessageBox.Show($"Ошибка смены пароля: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static (string Username, string CurrentPassword, string NewPassword)? PromptChangePasswordDialog(string defaultUsername)
+        {
+            using var form = new Form
+            {
+                Text = "Смена пароля",
+                Width = 420,
+                Height = 230,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+
+            var lblUser = new Label { Left = 14, Top = 18, Width = 125, Text = "Логин:" };
+            var txtUser = new TextBox { Left = 145, Top = 15, Width = 245, Text = string.IsNullOrWhiteSpace(defaultUsername) ? "admin" : defaultUsername };
+
+            var lblCurr = new Label { Left = 14, Top = 52, Width = 125, Text = "Текущий пароль:" };
+            var txtCurr = new TextBox { Left = 145, Top = 49, Width = 245, UseSystemPasswordChar = true };
+
+            var lblNew = new Label { Left = 14, Top = 86, Width = 125, Text = "Новый пароль:" };
+            var txtNew = new TextBox { Left = 145, Top = 83, Width = 245, UseSystemPasswordChar = true };
+
+            var lblConf = new Label { Left = 14, Top = 120, Width = 125, Text = "Повторите пароль:" };
+            var txtConf = new TextBox { Left = 145, Top = 117, Width = 245, UseSystemPasswordChar = true };
+
+            var btnOk = new Button { Text = "Сохранить", Left = 198, Top = 154, Width = 92, DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "Отмена", Left = 298, Top = 154, Width = 92, DialogResult = DialogResult.Cancel };
+
+            form.Controls.AddRange(new Control[] { lblUser, txtUser, lblCurr, txtCurr, lblNew, txtNew, lblConf, txtConf, btnOk, btnCancel });
+            form.AcceptButton = btnOk;
+            form.CancelButton = btnCancel;
+
+            if (form.ShowDialog() != DialogResult.OK) return null;
+            if (txtNew.Text != txtConf.Text)
+            {
+                MessageBox.Show("Пароли не совпадают.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return null;
+            }
+            if (string.IsNullOrWhiteSpace(txtUser.Text) || string.IsNullOrEmpty(txtCurr.Text) || string.IsNullOrWhiteSpace(txtNew.Text))
+                return null;
+
+            return (txtUser.Text.Trim(), txtCurr.Text, txtNew.Text);
         }
 
         private async void OnLoadDocumentClick(object? sender, EventArgs e)

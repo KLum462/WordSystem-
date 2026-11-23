@@ -8,6 +8,7 @@ using WordClient.Core.Models;
 using WordServer.Api.Data;
 using WordServer.Api.Data.Entities;
 using WordServer.Api.Middleware;
+using WordServer.Api.Services;
 
 namespace WordServer.Api.Controllers
 {
@@ -72,6 +73,7 @@ namespace WordServer.Api.Controllers
                 Email = request.Email?.Trim() ?? string.Empty,
                 Role = string.IsNullOrWhiteSpace(request.Role) ? "User" : request.Role.Trim(),
                 ApiKey = apiKey,
+                PasswordHash = PasswordHasher.HashPassword(string.IsNullOrWhiteSpace(request.Password) ? "123456" : request.Password),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };

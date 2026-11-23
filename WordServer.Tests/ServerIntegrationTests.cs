@@ -1108,5 +1108,75 @@ namespace WordServer.Tests
                 if (File.Exists(tempCfgPath)) File.Delete(tempCfgPath);
             }
         }
+
+        [Fact]
+        public async Task AuthLoginAndChangePassword_WorksAndRejectsWrongPassword()
+        {
+            // Valid login for seeded admin
+            var loginReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new LoginRequest { Username = "admin", Password = "admin123" }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            var loginResp = await _client.SendAsync(loginReq);
+            Assert.Equal(HttpStatusCode.OK, loginResp.StatusCode);
+
+            var auth = JsonSerializer.Deserialize<AuthValidateResponse>(await loginResp.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.NotNull(auth);
+            Assert.True(auth!.Valid);
+            Assert.Equal("admin", auth.User);
+            Assert.Equal("Admin", auth.Role);
+            Assert.Equal(ValidApiKey, auth.ApiKey);
+
+            // Wrong password -> 401
+            var badReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new LoginRequest { Username = "admin", Password = "wrong-password" }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            Assert.Equal(HttpStatusCode.Unauthorized, (await _client.SendAsync(badReq)).StatusCode);
+
+            // Change password for ivan_intern
+            var cpReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new ChangePasswordRequest
+                    {
+                        Username = "ivan_intern",
+                        CurrentPassword = "ivan123",
+                        NewPassword = "newpass456"
+                    }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(cpReq)).StatusCode);
+
+            // Old password now fails -> 401
+            var oldLoginReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new LoginRequest { Username = "ivan_intern", Password = "ivan123" }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            Assert.Equal(HttpStatusCode.Unauthorized, (await _client.SendAsync(oldLoginReq)).StatusCode);
+
+            // New password succeeds -> 200
+            var newLoginReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new LoginRequest { Username = "ivan_intern", Password = "newpass456" }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            var newLoginResp = await _client.SendAsync(newLoginReq);
+            Assert.Equal(HttpStatusCode.OK, newLoginResp.StatusCode);
+            var ivanAuth = JsonSerializer.Deserialize<AuthValidateResponse>(await newLoginResp.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.Equal("internship-key-demo", ivanAuth!.ApiKey);
+        }
     }
 }

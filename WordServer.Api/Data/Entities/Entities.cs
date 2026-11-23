@@ -136,6 +136,9 @@ namespace WordServer.Api.Data.Entities
         [MaxLength(255)]
         public string ApiKey { get; set; } = string.Empty;
 
+        [MaxLength(500)]
+        public string PasswordHash { get; set; } = string.Empty;
+
         [MaxLength(50)]
         public string Role { get; set; } = "Intern";
 
