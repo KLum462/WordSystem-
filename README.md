@@ -1,152 +1,134 @@
-# Word System: ASP.NET Core 8 & Microsoft Word 2016 VSTO Interop Solution
+# Word System: решение на ASP.NET Core 8 и Microsoft Word 2016 VSTO/COM Interop
 
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple.svg)](https://dotnet.microsoft.com/)
-[![SQLite](https://img.shields.io/badge/SQLite-Default-003B57.svg)](https://www.sqlite.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supported-336791.svg)](https://www.postgresql.org/)
-[![SQL Server 2022](https://img.shields.io/badge/SQL%20Server-Supported-red.svg)](https://www.microsoft.com/sql-server/)
+[![SQLite](https://img.shields.io/badge/SQLite-По%20умолчанию-003B57.svg)](https://www.sqlite.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Поддерживается-336791.svg)](https://www.postgresql.org/)
+[![SQL Server 2022](https://img.shields.io/badge/SQL%20Server-Поддерживается-red.svg)](https://www.microsoft.com/sql-server/)
 [![EF Core 8](https://img.shields.io/badge/EF%20Core-8.0.13-green.svg)](https://learn.microsoft.com/ef/core/)
-[![Tests](https://img.shields.io/badge/Integration%20Tests-43%2F43%20Passed%20(87.5%25%20cov)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Интеграционные%20тесты-43%2F43%20пройдено%20(87.5%25%20покрытие)-brightgreen.svg)]()
 
-Complete implementation of the **C# Developer Training Internship Assignment**. This repository contains an ASP.NET Core 8 backend server with Entity Framework Core 8 (SQLite default, PostgreSQL and SQL Server supported), accompanied by a Microsoft Word 2016 VSTO/COM Add-In (`.NET Framework 4.8`, `x86`) and interactive WinForms desktop test client using Microsoft Word COM Interop.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#project-overview)
-2. [Solution Architecture](#solution-architecture)
-3. [System Requirements & Prerequisites](#system-requirements--prerequisites)
-4. [Database Setup & Management (Microsoft SQL Server 2022 & SSMS)](#database-setup--management)
-5. [Database Provider Switching (SQL Server, SQLite, PostgreSQL)](#database-provider-switching)
-6. [Server Configuration & Execution](#server-configuration--execution)
-7. [API Endpoints Reference](#api-endpoints-reference)
-8. [Microsoft Word 2016 VSTO Add-In](#microsoft-word-2016-vsto-add-in)
-9. [Word Desktop Test App (Interactive Runner)](#word-desktop-test-app)
-10. [Word COM Interop Integration & Memory Management](#word-com-interop-integration--memory-management)
-11. [Error Handling, Timeouts, Retries & Logging](#error-handling-timeouts-retries--logging)
-12. [Integration Tests & Code Coverage](#integration-tests--code-coverage)
-13. [Final Demonstration Walkthrough (10–15 Minutes)](#final-demonstration-walkthrough)
-14. [Twelve-Week Internship Plan Alignment](#twelve-week-internship-plan-alignment)
+Полная реализация **учебного задания на стажировку C#-разработчика**. Репозиторий содержит серверную часть на **ASP.NET Core 8** с **Entity Framework Core 8** (по умолчанию используется **SQLite**, также поддерживаются **PostgreSQL** и **SQL Server**), надстройку для **Microsoft Word 2016 VSTO/COM** (`.NET Framework 4.8`, `x86`) и интерактивный десктопный тестовый клиент на WinForms с использованием Microsoft Word COM Interop.
 
 ---
 
-## 1. Project Overview
+## Содержание
 
-The project bridges desktop document generation in **Microsoft Word** and modern web services in **ASP.NET Core 8**. It enables:
-- Secure communication via API Key authentication (`X-API-Key` header).
-- Dynamic document generation directly from structured server JSON data (`Heading1`, `Normal`, tables, fonts, sizes).
-- Bidirectional text and document processing (e.g., uppercase, lowercase, reverse, word count) with automatic document insertion.
-- Full CRUD template management on Microsoft SQL Server 2022 using EF Core 8 migrations.
-- Strict enforcement of file and payload limits (up to **100 MB**).
-- Reliable COM cleanup preventing orphaned `WINWORD.EXE` background processes.
+1. [Обзор проекта](#1-обзор-проекта)
+2. [Архитектура решения](#2-архитектура-решения)
+3. [Системные требования и зависимости](#3-системные-требования-и-зависимости)
+4. [Настройка и управление базой данных](#4-настройка-и-управление-базой-данных)
+5. [Переключение провайдера БД (SQLite, PostgreSQL, SQL Server)](#5-переключение-провайдера-бд)
+6. [Настройка и запуск сервера](#6-настройка-и-запуск-сервера)
+7. [Справочник API-эндпоинтов](#7-справочник-api-эндпоинтов)
+8. [Надстройка Microsoft Word 2016 VSTO/COM](#8-надстройка-microsoft-word-2016-vstocom)
+9. [Десктопное тестовое приложение (WordClient.TestApp)](#9-десктопное-тестовое-приложение)
+10. [Интеграция с Word COM Interop и управление памятью](#10-интеграция-с-word-com-interop-и-управление-памятью)
+11. [Обработка ошибок, таймауты, повторные попытки и логирование](#11-обработка-ошибок-таймауты-повторные-попытки-и-логирование)
+12. [Интеграционные тесты и покрытие кода](#12-интеграционные-тесты-и-покрытие-кода)
+13. [Сценарий итоговой демонстрации (10–15 минут)](#13-сценарий-итоговой-демонстрации-1015-минут)
+14. [Соответствие 12-недельному плану стажировки](#14-соответствие-12-недельному-плану-стажировки)
 
 ---
 
-## 2. Solution Architecture
+## 1. Обзор проекта
 
-The solution (`WordSystem.sln`) is organized into clean, decoupled layers:
+Проект объединяет генерацию документов в **Microsoft Word** с веб-сервисами на **ASP.NET Core 8**. Реализованы следующие возможности:
+- Защищённое взаимодействие с авторизацией по API-ключу (заголовок `X-API-Key`).
+- Динамическое формирование документов `.docx` напрямую по структурированному JSON с сервера (`Heading1`, `Normal`, таблицы, шрифты и размеры).
+- Двусторонняя обработка выделенного текста и всего документа (верхний/нижний регистр, реверс, подсчёт слов, нормализация, анонимизация и др.) с автоматической вставкой результата обратно в Word.
+- Полный набор CRUD-операций для шаблонов документов с сохранением в БД через EF Core 8.
+- Строгий контроль ограничения на размер файлов и запросов (до **100 МБ** с возвратом `413 Payload Too Large`).
+- Корректное освобождение COM-объектов без зависших фоновых процессов `WINWORD.EXE`.
 
-```
-d:\СТАЖИРОВКА C#\Prod\
+---
+
+## 2. Архитектура решения
+
+Решение (`WordSystem.sln`) разделено на независимые слои:
+
+```text
+WordSystem/
 │
 ├── WordServer.Api/             # ASP.NET Core 8 Web API
-│   ├── App_Data/uploads/       # Stored .docx uploads (enforcing 100 MB / HTTP 413)
+│   ├── App_Data/uploads/       # Хранилище загруженных .docx-файлов (лимит 100 МБ / HTTP 413)
 │   ├── Controllers/            # Health, Auth, Documents, Text, Templates, Management
 │   ├── Data/                   # AppDbContext, Entities, DbInitializer
-│   ├── Migrations/             # EF Core 8 schema migrations
+│   ├── Migrations/             # Миграции схемы EF Core 8
 │   ├── Middleware/             # ApiKeyMiddleware, ExceptionMiddleware
 │   ├── Services/               # TextProcessingService
 │   ├── appsettings.json        # DatabaseProvider (Sqlite/Postgres/SqlServer), Storage, Auth
-│   └── Program.cs              # Serilog request/file logging, Swagger, Kestrel 100 MB limit
+│   └── Program.cs              # Логирование запросов и файлов (Serilog), Swagger, Kestrel (100 МБ)
 │
-├── WordClient.Core/            # Shared Library (Multi-targeting net8.0 & net48)
-│   ├── Configuration/          # ClientConfig (reads add-in dll.config / App.config)
-│   ├── Models/                 # DocumentDto, TemplateDto, Upload & Check DTOs
-│   └── Services/               # ApiClient (3 retries, 30s timeout), WordDocumentService, ClientLogger
+├── WordClient.Core/            # Общая библиотека (net8.0 и net48)
+│   ├── Configuration/          # ClientConfig (чтение dll.config / App.config)
+│   ├── Models/                 # DocumentDto, TemplateDto, модели загрузки и проверки
+│   └── Services/               # ApiClient (3 попытки, таймаут 30 с), WordDocumentService, ClientLogger
 │
-├── WordVstoAddIn/              # Word 2016 VSTO/COM Add-in (.NET Framework 4.8, x86)
-│   ├── Ribbon.cs / Ribbon.xml  # Custom Office Ribbon tab with 6 required buttons
-│   ├── RibbonDialogs.cs        # Document/Template loader, Processing, Inspection + Find & Replace
-│   ├── ComAddInConnect.cs      # Native Word COM Add-In entry point (IDTExtensibility2)
-│   ├── ThisAddIn.cs            # Add-In lifecycle and COM release handlers
-│   ├── Register-WordAddIn.ps1  # Auto-detects Office arch and registers add-in
-│   └── App.config              # Client connection settings and API key (copied to dll.config)
+├── WordVstoAddIn/              # Надстройка Word 2016 VSTO/COM (.NET Framework 4.8, x86)
+│   ├── Ribbon.cs / Ribbon.xml  # Пользовательская вкладка ленты «Инструменты Word»
+│   ├── RibbonDialogs.cs        # Диалоги загрузки документов/шаблонов, обработки, проверки и поиска/замены
+│   ├── ComAddInConnect.cs      # Точка входа COM-надстройки Word (IDTExtensibility2)
+│   ├── ThisAddIn.cs            # Жизненный цикл надстройки и освобождение COM
+│   ├── Register-WordAddIn.ps1  # Автоопределение разрядности Office и регистрация надстройки
+│   └── App.config              # Настройки подключения и API-ключ (копируется в dll.config)
 │
-├── WordClient.TestApp/         # Interactive WinForms Desktop Client (.NET 8 Windows Forms)
-│   ├── Form1.cs                # GUI testing all operations, .docx Open/SaveAs2/Upload & live logs
-│   └── App.config              # Connection settings
+├── WordClient.TestApp/         # Интерактивный WinForms-клиент (.NET 8 Windows Forms)
+│   ├── Form1.cs                # Графический интерфейс для всех операций, Open/SaveAs2/Upload и живые логи
+│   └── App.config              # Настройки подключения
 │
-└── WordServer.Tests/           # Integration Test Project (.NET 8 xUnit)
-    └── ServerIntegrationTests.cs # 43 integration tests (WebApplicationFactory + SQLite in-memory)
+└── WordServer.Tests/           # Проект интеграционных тестов (.NET 8 xUnit)
+    └── ServerIntegrationTests.cs # 43 интеграционных теста (WebApplicationFactory + SQLite in-memory)
 ```
 
 ---
 
-## 3. System Requirements & Prerequisites
+## 3. Системные требования и зависимости
 
-### Server Environment:
-- **Operating System:** Windows 10 / Windows 11 / Windows Server
-- **.NET SDK:** .NET SDK 8.0 or later (SDK 10.0 supported)
-- **Database:** Microsoft SQL Server 2022 (Express, Developer, or Standard edition)
-- **Database Administration:** SQL Server Management Studio (SSMS 20 or 22)
+### Окружение сервера:
+- **Операционная система:** Windows 10 / Windows 11 / Windows Server
+- **.NET SDK:** .NET SDK 8.0 или новее (поддерживается SDK 10.0)
+- **СУБД:** SQLite (по умолчанию, не требует установки), PostgreSQL 14+ или Microsoft SQL Server 2022
+- **Администрирование БД (при использовании SQL Server):** SQL Server Management Studio (SSMS 20 или 22)
 
-### Client Environment:
-- **Microsoft Word:** Microsoft Word 2016 (32-bit x86 or 64-bit with COM Interop)
+### Окружение клиента:
+- **Microsoft Word:** Microsoft Word 2016 (32-bit `x86` или 64-bit `x64` с поддержкой COM Interop)
 - **.NET Framework:** .NET Framework 4.8 Developer Pack
-- **Visual Studio:** Visual Studio 2022 or Visual Studio Community 2026 with:
-  - ".NET desktop development" workload
-  - "Office/SharePoint development" workload (for VSTO Add-In development)
+- **Visual Studio:** Visual Studio 2022 или Visual Studio Community 2026 с компонентами:
+  - «Разработка классических приложений .NET» (`.NET desktop development`)
+  - «Разработка для Office и SharePoint» (`Office/SharePoint development`, для разработки VSTO-надстроек)
 
 ---
 
-## 4. Database Setup & Management
+## 4. Настройка и управление базой данных
 
-### A. Installing Microsoft SQL Server 2022
-1. Download **SQL Server 2022 Express** or **Developer Edition** from Microsoft's official portal.
-2. Select **Basic** or **Custom** installation.
-3. Keep the default instance name: `MSSQLSERVER` (connects as `localhost` or `.`).
-4. Ensure **Windows Authentication Mode** (or Mixed Mode) is enabled.
+### А. Быстрый старт (SQLite по умолчанию)
+При первом запуске `WordServer.Api` файл базы данных `WordSystem.db` создаётся и заполняется автоматически (`DbInitializer`) — установка отдельного сервера БД не требуется.
 
-### B. Connecting via SQL Server Management Studio (SSMS)
-1. Launch **SQL Server Management Studio 22**.
-2. Set **Server type**: `Database Engine`.
-3. Set **Server name**: `localhost` or `.` (or `localhost\SQLEXPRESS` if using named instance).
-4. Set **Authentication**: `Windows Authentication`.
-5. Click **Connect**.
-
-### C. Database Connection String Configuration
-In [appsettings.json](file:///d:/СТАЖИРОВКА%20C%23/Prod/WordServer.Api/appsettings.json):
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost;Database=WordSystemDb;Integrated Security=True;TrustServerCertificate=True;MultipleActiveResultSets=true",
-    "SqliteConnection": "Data Source=WordSystem.db"
-  },
-  "DatabaseProvider": "SqlServer"
-}
-```
-
-### D. Applying EF Core Migrations
-The initial migration `InitialCreate` is included in the repository. To apply migrations and update the database:
+### Б. Использование Microsoft SQL Server 2022 и SSMS (опционально)
+1. Установите **SQL Server 2022 Express** или **Developer Edition** (имя экземпляра по умолчанию `MSSQLSERVER`, режим проверки подлинности Windows).
+2. Подключитесь в **SSMS** к серверу `localhost` (Windows Authentication).
+3. Укажите `"DatabaseProvider": "SqlServer"` в `WordServer.Api/appsettings.json`.
+4. Примените миграции EF Core:
 ```powershell
 dotnet ef database update --project WordServer.Api/WordServer.Api.csproj --startup-project WordServer.Api/WordServer.Api.csproj
 ```
 
-The database schema includes the 5 required tables:
-- `Documents`: Stores document ID, title, metadata JSON, content JSON, settings JSON, timestamps.
-- `Templates`: Stores template ID, name, description, JSON document structures.
-- `Metadata`: Stores author, version, timestamps, descriptions.
-- `Settings`: Stores application key-value configuration.
-- `Logs`: Records server activity and error telemetry.
+Схема базы данных включает все 5 обязательных таблиц (и 5 дополнительных):
+- `Documents`: идентификатор, заголовок, JSON метаданных, JSON содержимого, JSON настроек, даты.
+- `Templates`: идентификатор шаблона, название, описание, категория, JSON структуры документа, настроек и метаданных.
+- `Metadata`: автор, версия, дата создания, описание.
+- `Settings`: конфигурационные пары ключ–значение.
+- `Logs`: журнал серверных событий и ошибок.
+- Дополнительно: `Users`, `DocumentVersions`, `TemplateCategories`, `ProcessingHistory`, `DocumentComments`.
 
 ---
 
-## 5. Database Provider Switching
+## 5. Переключение провайдера БД
 
-The server supports switching between database engines via the `DatabaseProvider` key in `WordServer.Api/appsettings.json`:
+Сервер поддерживает переключение между СУБД через параметр `DatabaseProvider` в файле `WordServer.Api/appsettings.json`:
 
-### SQLite (Default — zero-configuration file database):
+### SQLite (по умолчанию — файловая БД без настройки):
 ```json
 "DatabaseProvider": "Sqlite",
 "ConnectionStrings": {
@@ -154,16 +136,16 @@ The server supports switching between database engines via the `DatabaseProvider
 }
 ```
 
-### PostgreSQL (Supported out of the box):
+### PostgreSQL (поддерживается из коробки):
 ```json
 "DatabaseProvider": "Postgres",
 "ConnectionStrings": {
   "PostgresConnection": "Host=localhost;Port=5432;Database=WordSystemDb;Username=postgres;Password=postgres"
 }
 ```
-(`Npgsql.EntityFrameworkCore.PostgreSQL` is pre-installed and configured with automatic retry on transient failures.)
+*(Пакет `Npgsql.EntityFrameworkCore.PostgreSQL` предустановлен и настроен с автоматическим повтором при временных сбоях.)*
 
-### Microsoft SQL Server 2022 (Optional):
+### Microsoft SQL Server 2022 (опционально):
 ```json
 "DatabaseProvider": "SqlServer",
 "ConnectionStrings": {
@@ -173,59 +155,59 @@ The server supports switching between database engines via the `DatabaseProvider
 
 ---
 
-## 6. Server Configuration & Execution
+## 6. Настройка и запуск сервера
 
-### Starting the Server:
+### Запуск сервера:
 ```powershell
 dotnet run --project WordServer.Api/WordServer.Api.csproj --urls "http://localhost:5000"
 ```
 
-Once started:
-- API Base URL: `http://localhost:5000`
-- Swagger UI Documentation: `http://localhost:5000/swagger`
-- Health check: `http://localhost:5000/api/health`
-- Server log files are written daily to: `WordServer.Api/bin/Debug/net8.0/logs/server-YYYYMMDD.log`
+После запуска доступны:
+- Базовый адрес API: `http://localhost:5000`
+- Документация Swagger UI: `http://localhost:5000/swagger`
+- Проверка работоспособности: `http://localhost:5000/api/health`
+- Ежедневные файлы логов сервера: `WordServer.Api/bin/Debug/net8.0/logs/server-YYYYMMDD.log`
 
-### Configuring Authentication & HTTPS:
-Authentication validates `X-API-Key` directly against active accounts in the `Users` database table (`IsActive = true`). Default seeded accounts:
-- `admin` (`Admin` role) — `secret-internship-api-key-2026`
-- `ivan_intern` (`Intern` role) — `internship-key-demo`
+### Настройка авторизации и HTTPS:
+Авторизация проверяет заголовок `X-API-Key` по активным учётным записям в таблице `Users` (`IsActive = true`). Предустановленные ключи:
+- `admin` (роль `Admin`) — `secret-internship-api-key-2026`
+- `ivan_intern` (роль `Intern`) — `internship-key-demo`
 
-Users can be created and activated/deactivated dynamically via `POST /api/management/users` and `PATCH /api/management/users/{id}/status`.
-To enable HTTPS redirection in production, set `"Security": { "EnableHttpsRedirection": true }` in `appsettings.json` (and run with `--urls "https://localhost:5001;http://localhost:5000"`).
+Пользователей можно создавать и блокировать через `POST /api/management/users` и `PATCH /api/management/users/{id}/status`.  
+Для включения перенаправления на HTTPS установите `"Security": { "EnableHttpsRedirection": true }` в `appsettings.json` (и запускайте с `--urls "https://localhost:5001;http://localhost:5000"`).
 
 ---
 
-## 7. API Endpoints Reference
+## 7. Справочник API-эндпоинтов
 
-| Method | Endpoint | Auth | Description |
+| Метод | Эндпоинт | Авторизация | Описание |
 |---|---|---|---|
-| `GET` | `/api/health` | No | Server and database health check |
-| `POST` | `/api/auth/validate` | Yes | Validates user API key against `Users` table, returns user & role |
-| `GET` | `/api/documents` | Yes | Lists all documents with author & version summary |
-| `GET` | `/api/documents/{id}` | Yes | Retrieves document JSON (`doc-001`) |
-| `POST` | `/api/documents` | Yes | Creates document, metadata, and v1 snapshot in `DocumentVersions` |
-| `PUT` | `/api/documents/{id}` | Yes | Updates document and creates next version in `DocumentVersions` |
-| `GET` | `/api/text/operations` | Yes | Lists all 12 supported processing operations |
-| `POST` | `/api/text/process` | Yes | Processes text (`uppercase`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats`, etc.) and logs to `ProcessingHistory` |
-| `POST` | `/api/documents/process` | Yes | Processes full document text (100 MB limit -> `413`) and logs to `ProcessingHistory` |
-| `POST` | `/api/documents/upload` | Yes | Uploads `.docx` file to `App_Data/uploads` (100 MB limit -> `413`) |
-| `GET` | `/api/documents/uploads` | Yes | Lists uploaded `.docx` files stored in `App_Data/uploads` |
-| `GET` | `/api/documents/uploads/{fileName}` | Yes | Downloads an uploaded `.docx` file from `App_Data/uploads` |
-| `POST` | `/api/documents/check` | Yes | Quality & PII inspection (empty paragraphs, double spaces, long sentences, emails/phones) |
-| `GET` | `/api/templates` | Yes | Lists templates (supports `?categoryId=` filter) |
-| `GET` | `/api/templates/{id}` | Yes | Retrieves template by ID (also `/api/template/{id}`) |
-| `POST` | `/api/templates` | Yes | Creates new template with optional `categoryId` |
-| `PUT` | `/api/templates/{id}` | Yes | Updates template by ID |
-| `DELETE` | `/api/templates/{id}` | Yes | Deletes template by ID |
-| `GET/POST/PATCH` | `/api/management/users` | Yes | Manage API users and active status (`/{id}/status`) |
-| `GET/POST` | `/api/management/categories` | Yes | Manage template categories |
-| `GET` | `/api/management/versions/{docId}` | Yes | View document version history |
-| `GET/POST/PATCH` | `/api/management/comments` | Yes | View, create, and resolve document comments |
-| `GET` | `/api/management/history` | Yes | Audit log of all text/document processing operations |
-| `GET/PUT` | `/api/management/settings` | Yes | Read and update key-value system settings |
+| `GET` | `/api/health` | Нет | Проверка состояния сервера и подключения к БД |
+| `POST` | `/api/auth/validate` | Да | Проверка API-ключа по таблице `Users`, возврат пользователя и роли |
+| `GET` | `/api/documents` | Да | Список всех документов с автором и версией |
+| `GET` | `/api/documents/{id}` | Да | Получение JSON документа (`doc-001`) |
+| `POST` | `/api/documents` | Да | Создание документа, метаданных и версии v1 в `DocumentVersions` |
+| `PUT` | `/api/documents/{id}` | Да | Обновление документа и создание следующей версии в `DocumentVersions` |
+| `GET` | `/api/text/operations` | Да | Список всех 12 поддерживаемых операций обработки текста |
+| `POST` | `/api/text/process` | Да | Обработка текста (`uppercase`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats` и др.) и запись в `ProcessingHistory` |
+| `POST` | `/api/documents/process` | Да | Обработка текста всего документа (лимит 100 МБ → `413`) и запись в `ProcessingHistory` |
+| `POST` | `/api/documents/upload` | Да | Загрузка файла `.docx` в `App_Data/uploads` (лимит 100 МБ → `413`) |
+| `GET` | `/api/documents/uploads` | Да | Список загруженных `.docx`-файлов в `App_Data/uploads` |
+| `GET` | `/api/documents/uploads/{fileName}` | Да | Скачивание загруженного `.docx`-файла из `App_Data/uploads` |
+| `POST` | `/api/documents/check` | Да | Проверка качества и персональных данных (пустые абзацы, двойные пробелы, длинные предложения, email/телефоны) |
+| `GET` | `/api/templates` | Да | Список шаблонов (поддерживается фильтр `?categoryId=`) |
+| `GET` | `/api/templates/{id}` | Да | Получение шаблона по ID (также `/api/template/{id}`) |
+| `POST` | `/api/templates` | Да | Создание нового шаблона с опциональной категорией `categoryId` |
+| `PUT` | `/api/templates/{id}` | Да | Обновление шаблона по ID |
+| `DELETE` | `/api/templates/{id}` | Да | Удаление шаблона по ID |
+| `GET/POST/PATCH` | `/api/management/users` | Да | Управление пользователями API и статусом активности (`/{id}/status`) |
+| `GET/POST` | `/api/management/categories` | Да | Управление категориями шаблонов |
+| `GET` | `/api/management/versions/{docId}` | Да | Просмотр истории версий документа |
+| `GET/POST/PATCH` | `/api/management/comments` | Да | Просмотр, создание и закрытие комментариев к документу |
+| `GET` | `/api/management/history` | Да | Журнал аудита всех операций обработки текста и документов |
+| `GET/PUT` | `/api/management/settings` | Да | Чтение и изменение системных настроек ключ–значение |
 
-### Document JSON Response Example (`GET /api/documents/doc-001`):
+### Пример JSON-ответа документа (`GET /api/documents/doc-001`):
 ```json
 {
   "id": "doc-001",
@@ -259,169 +241,165 @@ To enable HTTPS redirection in production, set `"Security": { "EnableHttpsRedire
 
 ---
 
-## 8. Microsoft Word 2016 VSTO Add-In
+## 8. Надстройка Microsoft Word 2016 VSTO/COM
 
-The VSTO Add-in project is located in `WordVstoAddIn/`.
+Проект надстройки находится в папке `WordVstoAddIn/`.
 
-### Configuration:
-- **Project Type:** Word 2016 VSTO Add-in
-- **Framework:** .NET Framework 4.8
-- **Platform:** x86
-- **Configuration File:** `App.config`
+### Параметры проекта:
+- **Тип проекта:** Надстройка Word 2016 VSTO / COM
+- **Платформа:** `.NET Framework 4.8`
+- **Целевая архитектура:** `x86` (поддерживается также сборка под `x64`)
+- **Файл конфигурации:** `App.config` (копируется в `WordVstoAddIn.dll.config`)
 
-### Required Ribbon Buttons:
-The custom Ribbon tab **"Internship Word Tools"** exposes 6 buttons:
-1. **"Authenticate"**: Sends API key (read from `WordVstoAddIn/App.config` / `WordVstoAddIn.dll.config`) to `/api/auth/validate`, verifying credentials, user role, and client log location.
-2. **"Load Document"**: Generates a styled `.docx` from server document JSON (`doc-001`) or server template (with optional `SaveAs2` to `.docx`), or opens an existing local `.docx` file with lock & 100 MB validation.
-3. **"Send Selected Text"**: Reads `Selection.Range.Text`, posts to `/api/text/process`, and inserts the result at the chosen target (Selected Range, End of Document, or Bookmark / Content Control).
-4. **"Send Document"**: Validates 100 MB limit (both file size and UTF-8 text), sends document text to `/api/documents/process`, inserts result, and optionally uploads the `.docx` file to `App_Data/uploads` (`POST /api/documents/upload`).
-5. **"Check Document"**: Shows document metadata (`Title`, `Author`, `CreationDate`), word/paragraph/empty-paragraph/table counts, Word spell-check errors, server quality issues, and includes an inline **Find & Replace...** action.
-6. **"Save Template"**: Extracts active document paragraphs, styles, tables, font/size, and metadata and saves it to the server template store via `/api/templates`.
+### Кнопки на пользовательской ленте («Инструменты Word»):
+1. **«Авторизация»**: отправляет API-ключ из `WordVstoAddIn/App.config` (`WordVstoAddIn.dll.config`) на `/api/auth/validate`, проверяя учётные данные, роль пользователя и путь к логу клиента.
+2. **«Загрузить документ»**: формирует оформленный `.docx` из JSON документа с сервера (`doc-001`) или сохранённого шаблона (с опциональным сохранением в `.docx` через `SaveAs2`), либо открывает существующий локальный `.docx`-файл с проверкой блокировки и лимита 100 МБ.
+3. **«Сохранить шаблон»**: извлекает из активного документа абзацы, стили, таблицы, шрифт/размер и метаданные и сохраняет шаблон на сервер через `/api/templates`.
+4. **«Отправить выделенное»**: считывает `Selection.Range.Text`, отправляет на `/api/text/process` и вставляет ответ в выбранное место (выделенный диапазон, конец документа или закладка / Content Control).
+5. **«Отправить документ»**: проверяет лимит 100 МБ (по размеру файла и по UTF-8 тексту), отправляет текст на `/api/documents/process`, вставляет результат и при необходимости загружает `.docx`-файл в `App_Data/uploads` (`POST /api/documents/upload`).
+6. **«Проверить документ»**: отображает метаданные (`Заголовок`, `Автор`, `Дата создания`), количество слов/абзацев/пустых абзацев/таблиц, ошибки орфографии через Word Interop и замечания сервера.
+7. **«Найти и заменить»**: открывает диалог поиска и замены текста по всему активному документу Word.
 
-### Building, Debugging (Visual Studio F5) & Registering the Add-In:
-- **Where to configure API Key & Server URL:** Edit `WordVstoAddIn/App.config` (copied automatically to `WordVstoAddIn.dll.config`).
-- **Build (`x86` default per spec):**
+### Сборка, отладка (Visual Studio F5) и регистрация надстройки:
+- **Где указать API-ключ и адрес сервера:** отредактируйте `WordVstoAddIn/App.config` (автоматически копируется в `WordVstoAddIn.dll.config`).
+- **Сборка (`x86` по умолчанию согласно ТЗ):**
   ```powershell
   dotnet build WordVstoAddIn/WordVstoAddIn.csproj
   ```
-- **Register in Microsoft Word** (run PowerShell as Administrator; auto-detects x86/x64 Office or pass `-OfficeArch x86` / `-OfficeArch x64`):
+- **Регистрация в Microsoft Word** (запустите PowerShell **от имени администратора**; скрипт сам определяет разрядность установленного Office или принимает `-OfficeArch x86` / `-OfficeArch x64`):
   ```powershell
   .\WordVstoAddIn\Register-WordAddIn.ps1
   ```
-- **Run/Debug from Visual Studio:** Open `WordSystem.sln`, set `WordVstoAddIn` as Startup Project, choose the matching Word launch profile (`Microsoft Word (x86)` or `Microsoft Word (x64)`), and press **F5**.
-- **Unregister cleanly:**
+- **Запуск и отладка из Visual Studio:** откройте `WordSystem.sln`, назначьте `WordVstoAddIn` запускаемым проектом, выберите профиль (`Microsoft Word (x86)` или `Microsoft Word (x64)`) и нажмите **F5**.
+- **Удаление регистрации:**
   ```powershell
   .\WordVstoAddIn\Unregister-WordAddIn.ps1
   ```
 
 ---
 
-## 9. Word Desktop Test App
+## 9. Десктопное тестовое приложение
 
-For instant testing and interactive demonstration without needing to attach to `WINWORD.EXE`, the solution includes `WordClient.TestApp`:
+Для быстрой проверки и демонстрации работы API и Word Interop без необходимости запускать надстройку внутри `WINWORD.EXE` в решение включён вспомогательный клиент `WordClient.TestApp`:
 
 ```powershell
 dotnet run --project WordClient.TestApp/WordClient.TestApp.csproj
 ```
 
-Features:
-- GUI controls for Server URL, API Key, Document ID, Operation, and Insertion Location.
-- Buttons for all 6 required actions.
-- Real-time event log window displaying API requests, retry attempts, and Word COM events.
-- Direct Word Interop automation with active instance detection and document generation.
+Возможности:
+- Поля для настройки адреса сервера, API-ключа, ID документа, операции и места вставки результата.
+- Кнопки для всех основных и вспомогательных операций (включая открытие/сохранение/загрузку `.docx`, работу с шаблонами и поиск/замену).
+- Окно живого журнала событий (HTTP-запросы, повторные попытки, события Word COM).
+- Прямая автоматизация Word Interop с подключением к запущенному Word или созданием нового процесса.
 
 ---
 
-## 10. Word COM Interop Integration & Memory Management
+## 10. Интеграция с Word COM Interop и управление памятью
 
-The client strictly adheres to Microsoft Word COM Interop best practices:
-- **Objects & APIs Used:**
+Клиентская часть строго соблюдает правила работы с Microsoft Word COM Interop:
+- **Используемые объекты и API:**
   - `Microsoft.Office.Interop.Word.Application`
-  - `Microsoft.Office.Interop.Word.Document` (and `ActiveDocument`)
+  - `Microsoft.Office.Interop.Word.Document` (и `ActiveDocument`)
   - `Selection.Range`
   - `Paragraphs`
   - `Range.Text`
-  - `Bookmarks`
+  - `Bookmarks` и `ContentControls`
   - `Tables`
   - `Styles`
-  - `SaveAs2` with `WdSaveFormat.wdFormatXMLDocument`
-- **COM Release Discipline:**
-  - All COM object handles are wrapped in `try/finally` blocks and released using `Marshal.ReleaseComObject(...)`.
-  - Garbage collection is forced (`GC.Collect()`, `GC.WaitForPendingFinalizers()`, `GC.Collect()`) upon completion.
-  - Ensures no orphaned `WINWORD.EXE` background processes remain in Task Manager.
-- **Handled Error Scenarios:**
-  - Microsoft Word is not running (automatically starts a new Word process).
-  - No active document exists (prompts user to open/create a document).
-  - Target file locked or in use (detects file locks before opening).
-  - File size exceeds 100 MB (validated on both client and server).
-  - Server unavailable (3 retry attempts with exponential backoff before friendly error).
-  - Invalid API key (HTTP 401 handled gracefully without application crash).
+  - `SaveAs2` с `WdSaveFormat.wdFormatXMLDocument`
+- **Дисциплина освобождения COM:**
+  - Все ссылки на COM-объекты оборачиваются в блоки `try/finally` и освобождаются через `Marshal.ReleaseComObject(...)`.
+  - При завершении выполняется принудительная сборка мусора (`GC.Collect()`, `GC.WaitForPendingFinalizers()`, `GC.Collect()`).
+  - Исключается появление зависших фоновых процессов `WINWORD.EXE` в Диспетчере задач.
+- **Обрабатываемые внештатные ситуации:**
+  - Microsoft Word не запущен (автоматически запускается новый экземпляр Word).
+  - Нет активного документа (показывается понятное сообщение пользователю).
+  - Целевой файл занят другим процессом (проверка блокировки перед открытием/сохранением).
+  - Размер файла или текста превышает 100 МБ (проверка и на клиенте, и на сервере).
+  - Сервер недоступен (3 повторные попытки с задержкой и понятным сообщением об ошибке).
+  - Неверный API-ключ (корректная обработка HTTP `401` без падения приложения).
 
 ---
 
-## 11. Error Handling, Timeouts, Retries & Logging
+## 11. Обработка ошибок, таймауты, повторные попытки и логирование
 
-- **Retry Policy:** `ApiClient` implements an automatic retry mechanism (up to 3 attempts with progressive delay: 1s, 2s) on connection failures or server 5xx errors.
-- **Request Timeout:** Configured to **30 seconds** (`Timeout = TimeSpan.FromSeconds(30)`).
-- **Client Logging:** Logs every operation, request, retry attempt, and COM event to `logs/client.log`.
-- **Server Logging:** Serilog writes daily rolling log files to `logs/server-YYYYMMDD.log` and logs errors to the SQL Server `Logs` table.
-- **HTTP Status Codes:**
+- **Политика повторов (Retry):** `ApiClient` автоматически выполняет до **3 попыток** с прогрессивной задержкой (1 с, 2 с) при сетевых сбоях или ответах сервера `5xx`.
+- **Таймаут запросов:** настроен на **30 секунд** (`Timeout = TimeSpan.FromSeconds(30)`).
+- **Логирование клиента:** все действия, запросы, повторы и события COM пишутся в `logs/client.log` (а при запуске внутри защищённой папки Office — в `%LocalAppData%\WordSystem\logs\client.log`).
+- **Логирование сервера:** Serilog записывает все HTTP-запросы, авторизацию и ошибки в ежедневные файлы `logs/server-YYYYMMDD.log`, а критические ошибки дополнительно сохраняет в таблицу `Logs` в БД.
+- **Коды ответов HTTP:**
   - `200 OK` / `201 Created` / `204 NoContent`
-  - `400 Bad Request` (Malformed JSON, invalid operations)
-  - `401 Unauthorized` (Invalid or missing `X-API-Key`)
-  - `404 Not Found` (Missing document or template ID)
-  - `413 Payload Too Large` (Payloads > 100 MB)
-  - `500 Internal Server Error` (Unhandled exceptions captured gracefully)
+  - `400 Bad Request` (битый JSON, неизвестная операция, неверное расширение файла)
+  - `401 Unauthorized` (отсутствующий, пустой или неверный `X-API-Key`)
+  - `404 Not Found` (документ, шаблон или файл не найден)
+  - `413 Payload Too Large` (размер текста или файла > 100 МБ)
+  - `500 Internal Server Error` (перехват необработанных исключений без падения сервера)
 
 ---
 
-## 12. Integration Tests & Code Coverage
+## 12. Интеграционные тесты и покрытие кода
 
-Integration tests use `WebApplicationFactory<Program>`, `TestServer`, and **SQLite in-memory** (`DataSource=:memory:`) to achieve **87.51% line coverage** (63.65% branch coverage) of `WordServer.Api` server logic — well above the ≥ 50% requirement.
+Интеграционные тесты используют `WebApplicationFactory<Program>`, `TestServer` и **SQLite in-memory** (`DataSource=:memory:`), обеспечивая **87.51% покрытия строк** (63.65% покрытия ветвей) серверной логики `WordServer.Api` — существенно выше требования ТЗ (≥ 50%).
 
-### Running Tests:
+### Запуск тестов:
 ```powershell
 dotnet test WordServer.Tests/WordServer.Tests.csproj --collect:"XPlat Code Coverage"
 ```
 
-### Test Suite Summary:
-- **Total Tests:** 43 passed (0 failed, 0 skipped)
-- **Covered Scenarios:**
-  - Health check endpoint
-  - API Key authentication (valid DB users, roles, deactivation, invalid, missing)
-  - Document retrieval (`doc-001` schema compliance), creation, versioning, and 404 responses
-  - Text processing (`uppercase`, `lowercase`, `reverse`, `word_count`, `trim`, `capitalize`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats`)
-  - Document processing, paragraph statistics, and `413 Payload Too Large` limit enforcement
-  - `.docx` file upload to `App_Data/uploads` (`POST /api/documents/upload`), listing, download, extension validation (`400`), and size limit (`413`)
-  - Document checking (empty paragraphs, double spaces, PII detection)
-  - Full CRUD lifecycle for Templates on both `/api/templates` and `/api/template/{id}`
-  - Malformed JSON (`400`) and global `ExceptionMiddleware` (`400`, `413`, `500`) handling
-  - Management endpoints (users, categories, comments, settings, processing history)
-  - Client configuration loading from add-in `.config` file and client-side 100 MB enforcement
+### Состав тестового набора:
+- **Всего тестов:** 43 пройдено (0 упавших, 0 пропущенных)
+- **Проверяемые сценарии:**
+  - Проверка работоспособности (`/api/health`)
+  - Авторизация по API-ключу (активные пользователи БД, роли, деактивация, неверный и отсутствующий ключ)
+  - Получение документов (`doc-001` по схеме ТЗ), создание, версионирование и ответ `404`
+  - Обработка текста (`uppercase`, `lowercase`, `reverse`, `word_count`, `trim`, `capitalize`, `normalize`, `anonymize`, `extract_entities`, `summarize`, `stats`)
+  - Обработка всего документа, статистика абзацев и проверка лимита `413 Payload Too Large`
+  - Загрузка `.docx`-файлов в `App_Data/uploads` (`POST /api/documents/upload`), список, скачивание, проверка расширения (`400`) и превышения лимита (`413`)
+  - Проверка документа (пустые абзацы, двойные пробелы, обнаружение персональных данных)
+  - Полный CRUD-цикл для шаблонов по маршрутам `/api/templates` и `/api/template/{id}`
+  - Обработка битого JSON (`400`) и глобальный `ExceptionMiddleware` (`400`, `413`, `500`)
+  - Административные эндпоинты (пользователи, категории, комментарии, настройки, история обработки)
+  - Чтение конфигурации клиента из `.config`-файла надстройки и клиентская проверка лимита 100 МБ
 
 ---
 
-## 13. Final Demonstration Walkthrough (10–15 Minutes)
+## 13. Сценарий итоговой демонстрации (10–15 минут)
 
-Follow these steps during the final demonstration:
-
-1. **Step 1: Start Microsoft SQL Server 2022 & Verify Database**
-   - Open SSMS, connect to `localhost`.
-   - Expand `Databases` -> `WordSystemDb` -> `Tables` (`Documents`, `Templates`, `Metadata`, `Settings`, `Logs`).
-2. **Step 2: Start the ASP.NET Core 8 Server**
-   - Run: `dotnet run --project WordServer.Api/WordServer.Api.csproj --urls "http://localhost:5000"`
-   - Open browser at `http://localhost:5000/swagger` to demonstrate interactive Swagger UI and `/api/health`.
-3. **Step 3: Launch Microsoft Word & Client**
-   - Open Microsoft Word 2016 or launch `WordClient.TestApp` / Word VSTO Add-In.
-4. **Step 4: Authenticate Client**
-   - Click **"Authenticate"**. Observe successful verification dialog.
-5. **Step 5: Load Document from Server**
-   - Click **"Load Document"**. Observe Word opening a new document with Title Heading 1, paragraphs in Normal style, and formatted table populated from `doc-001`.
-6. **Step 6: Send Selected Text**
-   - Select text in Word and click **"Send Selected Text"**. Observe text being transformed on the server and replaced back into the document selection.
-7. **Step 7: Send Entire Document**
-   - Click **"Send Document"**. Observe 100 MB size validation, server processing, and the processed text appended at the end of the document.
-8. **Step 8: Check Document & Save Template**
-   - Click **"Check Document"** to inspect word counts, paragraph counts, and empty paragraphs.
-   - Click **"Save Template"** to save the active document structure to SQL Server `Templates` table.
-9. **Step 9: Verify COM Cleanup**
-   - Close the client and observe in Task Manager that no orphaned `WINWORD.EXE` processes remain.
+1. **Шаг 1. Запуск сервера ASP.NET Core 8**
+   - Выполните: `dotnet run --project WordServer.Api/WordServer.Api.csproj --urls "http://localhost:5000"`
+   - Откройте в браузере `http://localhost:5000/swagger`, чтобы показать Swagger UI и `/api/health`.
+2. **Шаг 2. Запуск Microsoft Word и надстройки**
+   - Откройте Microsoft Word (или запустите `WordVstoAddIn` из Visual Studio по **F5**).
+   - Перейдите на вкладку **«Инструменты Word»**.
+3. **Шаг 3. Авторизация клиента**
+   - Нажмите **«Авторизация»** — отобразится сообщение об успешной проверке ключа и имени пользователя.
+4. **Шаг 4. Загрузка документа с сервера**
+   - Нажмите **«Загрузить документ»** и выберите `doc-001` — в Word сформируется документ с заголовком `Heading1`, абзацами `Normal`, оформленной таблицей и шрифтом `Times New Roman`.
+5. **Шаг 5. Отправка выделенного текста**
+   - Выделите текст в Word и нажмите **«Отправить выделенное»** — сервер обработает фрагмент и вставит результат обратно в выделение.
+6. **Шаг 6. Отправка всего документа и загрузка `.docx`**
+   - Нажмите **«Отправить документ»** — выполняется проверка лимита 100 МБ, обработка текста и вставка ответа (при желании — сохранение `.docx` в `App_Data/uploads`).
+7. **Шаг 7. Проверка документа, поиск/замена и сохранение шаблона**
+   - Нажмите **«Проверить документ»** для просмотра метаданных, статистики, пустых абзацев и орфографии; используйте **«Найти и заменить»** для замены текста.
+   - Нажмите **«Сохранить шаблон»**, чтобы сохранить структуру документа в БД на сервере.
+8. **Шаг 8. Проверка освобождения COM**
+   - Закройте Word / клиент и убедитесь в Диспетчере задач, что фоновых процессов `WINWORD.EXE` не осталось.
 
 ---
 
-## 14. Twelve-Week Internship Plan Alignment
+## 14. Соответствие 12-недельному плану стажировки
 
-| Week | Topic / Deliverables | Implementation Status |
+| Неделя | Тема | Статус реализации |
 |---|---|---|
-| 1 | Basic VSTO setup & Ribbon button creation | `WordVstoAddIn/Ribbon.cs`, `Ribbon.xml` with 6 buttons |
-| 2 | Word Interop fundamentals (creating, styling, tables, SaveAs2) | `WordDocumentService.cs` (`GenerateDocumentFromDto`) |
-| 3 | ASP.NET Core 8 server, health check, API key middleware | `Program.cs`, `ApiKeyMiddleware.cs`, `HealthController.cs` |
-| 4 | SQL Server 2022 setup, EF Core 8, data models, migrations | `AppDbContext.cs`, `InitialCreate.cs`, `WordSystemDb` |
-| 5 | Client configuration, HttpClient, authentication | `ClientConfig.cs`, `ApiClient.cs` (`ValidateAuthAsync`) |
-| 6 | GET /api/documents/{id} & generating .docx from JSON | `DocumentsController.cs`, `WordDocumentService.cs` |
-| 7 | Sending selected text & entire document; inserting results | `TextController.cs`, `InsertResult` at selection/end/bookmark |
-| 8 | Document templates CRUD, metadata & settings | `TemplatesController.cs`, `TemplateEntity`, `MetadataEntity` |
-| 9 | Error handling, retries, timeouts, file logging | 3-retry backoff, 30s timeout, Serilog & `ClientLogger` |
-| 10 | Integration testing (>= 50% server coverage) | 43 xUnit tests with `WebApplicationFactory` & SQLite in-memory (87.5% server coverage) |
-| 11 | Enforcement of 100 MB limit, `App_Data/uploads` & documentation | Client and server 100 MB / `413` limits, `App_Data/uploads`, `README.md`, `INSTALL.md` |
-| 12 | Final demonstration & deliverables on `master` branch | Complete repository on Git `master` branch |
+| 1 | Настройка окружения, VSTO hello world, кнопки на ленте | `WordVstoAddIn/Ribbon.cs`, `Ribbon.xml` (вкладка «Инструменты Word») |
+| 2 | Основы Word Interop: создание, открытие, стили, таблицы, `SaveAs2` | `WordDocumentService.cs` (`GenerateDocumentFromDto`, `SaveActiveDocumentAs`, `OpenDocument`) |
+| 3 | Сервер ASP.NET Core 8: health, API key middleware | `Program.cs`, `ApiKeyMiddleware.cs`, `HealthController.cs` |
+| 4 | БД, EF Core, модели, базовые endpoints | `AppDbContext.cs`, `DbInitializer.cs`, 10 таблиц БД |
+| 5 | Клиент: конфиг, `HttpClient`, авторизация | `ClientConfig.cs`, `ApiClient.cs` (`ValidateAuthDetailedAsync`) |
+| 6 | `GET /api/documents/{id}` → генерация `.docx` по JSON | `DocumentsController.cs`, `WordDocumentService.cs` |
+| 7 | Отправка выделенного текста и всего документа, вставка результата | `TextController.cs`, `InsertResult` (выделение / конец / закладка) |
+| 8 | Шаблоны, метаданные, настройки | `TemplatesController.cs`, `TemplateEntity`, `MetadataEntity`, `SettingEntity` |
+| 9 | Обработка ошибок, retry, timeout, логи | 3 попытки повтора, таймаут 30 с, Serilog и `ClientLogger` |
+| 10 | Интеграционные тесты, покрытие ≥ 50% | 43 xUnit-теста (`WebApplicationFactory` + SQLite in-memory, покрытие 87.51%) |
+| 11 | Ограничение 100 МБ, `App_Data/uploads`, документация | Лимиты 100 МБ / `413` на клиенте и сервере, `App_Data/uploads`, `README.md`, `INSTALL.md` |
+| 12 | Демо и сдача репозитория в ветке `master` | Полный код загружен в ветку `master` на GitHub |
